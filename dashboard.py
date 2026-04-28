@@ -234,25 +234,30 @@ def main():
         st.markdown("---")
         st.subheader("📅 Actividad Diaria (Remitido por día)")
         
-        # Activity based on Column O (Remito Date)
+        # Activity summary based on Column O (Remito Date)
         if pd.notnull(df[cmap['FACTURA']]).any():
             act_df = df.dropna(subset=[cmap['FACTURA']]).copy()
             act_df = act_df[act_df[cmap['FACTURA']].dt.year == 2026]
             
             act_df['Mes'] = act_df[cmap['FACTURA']].dt.strftime('%Y-%m')
-            act_df['Fecha'] = act_df[cmap['FACTURA']].dt.strftime('%d/%m/%Y')
+            act_df['Fecha_Raw'] = act_df[cmap['FACTURA']].dt.date
+            act_df['Fecha_Str'] = act_df[cmap['FACTURA']].dt.strftime('%d/%m/%Y')
             
             sel_month = st.selectbox("Seleccione el Mes para Actividad", sorted(act_df['Mes'].unique(), reverse=True))
-            m_data = act_df[act_df['Mes'] == sel_month].sort_values(cmap['FACTURA'], ascending=False)
+            m_data = act_df[act_df['Mes'] == sel_month].copy()
             
-            def color_pending(s):
-                return ['background-color: #ffb3ba; color: black' if v in ['Pendiente de armado', 'Pendiente de despacho'] else '' for v in s]
-
-            st.dataframe(
-                m_data[['Fecha', 'Nro de Pedido', 'Cliente', 'Remito', 'estado de pedido']].style.apply(color_pending, subset=['estado de pedido'], axis=0),
-                use_container_width=True,
-                hide_index=True
-            )
+            # Aggregate by date
+            summary = m_data.groupby(['Fecha_Raw', 'Fecha_Str']).agg(
+                Remitos_diarios=('Nro de Pedido', 'count'),
+                Pendiente_armado=('Bultos', lambda x: (pd.isnull(x) | (x == 0)).sum()),
+                Pendiente_despacho=('LR Fecha y Hora ', lambda x: pd.isnull(x).sum())
+            ).reset_index().sort_values('Fecha_Raw', ascending=False)
+            
+            # Final columns as requested
+            summary = summary[['Fecha_Str', 'Remitos_diarios', 'Pendiente_armado', 'Pendiente_despacho']]
+            summary.columns = ['Fecha', 'Remitos diarios', 'Pendiente de armado', 'Pendiente de despacho']
+            
+            st.dataframe(summary, use_container_width=True, hide_index=True)
         else:
             st.info("No hay remitos registrados en 2026 para mostrar actividad.")
 
