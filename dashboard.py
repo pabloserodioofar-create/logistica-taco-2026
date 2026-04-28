@@ -263,14 +263,28 @@ def main():
             st.info("No hay remitos registrados en 2026 para mostrar actividad.")
 
         st.markdown("---")
-        st.subheader("⏱️ Promedios Mensuales")
+        st.subheader("⏱️ Promedios Mensuales (2026)")
         if pd.notnull(df[cmap['NP_ALTA']]).any():
-            df_t = df.dropna(subset=['Dias NP/LR', cmap['NP_ALTA']]).copy()
-            df_t['Mes'] = df_t[cmap['NP_ALTA']].dt.strftime('%Y-%m')
-            prom_m = df_t.groupby('Mes')['Dias NP/LR'].mean().reset_index()
-            tc1, tc2 = st.columns([1, 2])
-            with tc1: st.dataframe(prom_m.sort_values('Mes', ascending=False), hide_index=True)
-            with tc2: st.altair_chart(create_static_bar_chart(prom_m, 'Mes', 'Dias NP/LR'), use_container_width=True)
+            # Filter only 2026 data
+            df_2026 = df[df[cmap['NP_ALTA']].dt.year == 2026].copy()
+            df_t = df_2026.dropna(subset=['Dias NP/LR', cmap['NP_ALTA']]).copy()
+            
+            if not df_t.empty:
+                # Global Metric
+                avg_2026 = df_t['Dias NP/LR'].mean()
+                st.metric("Promedio General 2026", f"{avg_2026:.2f} días")
+                
+                # Monthly grouping
+                df_t['Mes'] = df_t[cmap['NP_ALTA']].dt.strftime('%Y-%m')
+                prom_m = df_t.groupby('Mes')['Dias NP/LR'].mean().reset_index()
+                
+                tc1, tc2 = st.columns([1, 2])
+                with tc1: 
+                    st.dataframe(prom_m.sort_values('Mes', ascending=False), hide_index=True, use_container_width=True)
+                with tc2: 
+                    st.altair_chart(create_static_bar_chart(prom_m, 'Mes', 'Dias NP/LR'), use_container_width=True)
+            else:
+                st.info("No hay suficientes datos para calcular promedios en 2026.")
 
     # --- TAB 3: CDS ---
     with tab3:
