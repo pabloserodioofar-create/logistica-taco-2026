@@ -100,22 +100,26 @@ def load_and_process_data():
         st.error(f"Error conectando a GSheets: {e}")
         st.stop()
 
-    # Column Mapping (based on Hoja1 structure)
-    # We use the names as they appear in the CSV export
-    MAP = {
-        'NP_ALTA': 'NP Alta -Fecha y hora ',
-        'NP_APROB': 'NP de aprobaci\u00f3n final -Fecha y hora ',
-        'FACTURA': 'Comprobante Fecha y Hora',
-        'FECHA': 'Referencia Remito',
-        'DESPACHO': 'LR Fecha y Hora ',
-        'ZONA': 'AMBA/INTERIOR',
-        'ESTADO': 'estado de pedido',
-        'DIAS_NP_LR': 'Dias NP/LR',
-        'DIAS_CDS': 'dias de entrega',
-        'PENDIENTES': 'Pendientes',
-        'TIEMPO_LOG': 'Tiempos Logistica',
-        'CDS_RECIBE': 'CDS recibe',
-        'CDS_ENTREGA': 'CDS entrega'
+    def find_col(idx, default_name):
+        if idx < len(df.columns):
+            return df.columns[idx]
+        return default_name
+
+    # Column Mapping by Index (more robust for encoding issues)
+    MAP_COLS = {
+        'NP_ALTA': find_col(7, 'NP Alta -Fecha y hora '),
+        'NP_APROB': find_col(11, 'NP de aprobaci\u00f3n final -Fecha y hora '),
+        'FACTURA': find_col(14, 'Comprobante Fecha y Hora'),
+        'FECHA': find_col(18, 'Referencia Remito'),
+        'DESPACHO': find_col(27, 'LR Fecha y Hora '),
+        'ZONA': find_col(31, 'AMBA/INTERIOR'),
+        'ESTADO': find_col(32, 'estado de pedido'),
+        'DIAS_NP_LR': find_col(33, 'Dias NP/LR'),
+        'CDS_RECIBE': find_col(36, 'CDS recibe'),
+        'CDS_ENTREGA': find_col(37, 'CDS entrega'),
+        'DIAS_CDS': find_col(38, 'dias de entrega'),
+        'PENDIENTES': find_col(39, 'Pendientes'),
+        'TIEMPO_LOG': find_col(40, 'Tiempos Logistica')
     }
 
     # NIC Cleaning for Search
@@ -123,35 +127,29 @@ def load_and_process_data():
         val = str(val).replace(" ", "").strip()
         if val.isdigit() and len(val) > 9: return val[3:-4]
         return val
-    df['NIC_CLEAN'] = df['NIC'].apply(clean_nic)
+    df['NIC_CLEAN'] = df.iloc[:, 2].apply(clean_nic) # Column 2 is NIC
 
-    # Date Conversion for DISPLAY only (using American format from GSheets CSV)
-    # We use errors='coerce' so if it fails, it remains as is or NaT
+    # Date Conversion for DISPLAY only
+    cmap = {}
     for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE']:
-        col = MAP[key]
-        if col in df.columns:
-            # Try to parse for better display, but we don't rely on this for math anymore
-            df[col + '_DT'] = pd.to_datetime(df[col], errors='coerce')
+        col_name = MAP_COLS[key]
+        new_col = key + '_DT'
+        df[new_col] = pd.to_datetime(df[col_name], errors='coerce')
+        cmap[key] = new_col
 
     # Consistency names for the rest of the app
-    df['AMBA/INTERIOR'] = df[MAP['ZONA']]
-    df['estado de pedido'] = df[MAP['ESTADO']]
-    df['Dias NP/LR'] = pd.to_numeric(df[MAP['DIAS_NP_LR']], errors='coerce')
-    df['dias de entrega'] = pd.to_numeric(df[MAP['DIAS_CDS']], errors='coerce')
-    df['Pendientes'] = pd.to_numeric(df[MAP['PENDIENTES']], errors='coerce')
-    df['Tiempos Logistica'] = pd.to_numeric(df[MAP['TIEMPO_LOG']], errors='coerce')
-    df['CDS recibe'] = df[MAP['CDS_RECIBE']]
-    df['CDS entrega'] = df[MAP['CDS_ENTREGA']]
-    df['Comprobante Fecha y Hora'] = df[MAP['FACTURA']]
-    df['LR Fecha y Hora '] = df[MAP['DESPACHO']]
+    df['AMBA/INTERIOR'] = df[MAP_COLS['ZONA']]
+    df['estado de pedido'] = df[MAP_COLS['ESTADO']]
+    df['Dias NP/LR'] = pd.to_numeric(df[MAP_COLS['DIAS_NP_LR']], errors='coerce')
+    df['dias de entrega'] = pd.to_numeric(df[MAP_COLS['DIAS_CDS']], errors='coerce')
+    df['Pendientes'] = pd.to_numeric(df[MAP_COLS['PENDIENTES']], errors='coerce')
+    df['Tiempos Logistica'] = pd.to_numeric(df[MAP_COLS['TIEMPO_LOG']], errors='coerce')
+    df['CDS recibe'] = df[MAP_COLS['CDS_RECIBE']]
+    df['CDS entrega'] = df[MAP_COLS['CDS_ENTREGA']]
+    df['Comprobante Fecha y Hora'] = df[MAP_COLS['FACTURA']]
+    df['LR Fecha y Hora '] = df[MAP_COLS['DESPACHO']]
     
-    return df, {
-        'NP_ALTA': MAP['NP_ALTA'] + '_DT', 
-        'NP_APROB': MAP['NP_APROB'] + '_DT', 
-        'FACTURA': MAP['FACTURA'] + '_DT', 
-        'DESPACHO': MAP['DESPACHO'] + '_DT',
-        'CDS_RECIBE': MAP['CDS_RECIBE'] + '_DT'
-    }
+    return df, cmap
 
 def main():
     logo_path = 'Logo Ofar.png'
