@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 import altair as alt
 
-# Use dynamic today's date
+# Dynamic today
 TODAY = datetime.now()
 
 # Google Sheets IDs
@@ -14,321 +14,167 @@ HOJA1_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=cs
 HOJA2_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=943820696"
 
 # Page Configuration
-st.set_page_config(
-    page_title="Logistics Dashboard - Taco 2026",
-    page_icon="🚚",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Custom CSS for Premium Design
-st.markdown("""
-<style>
-.main { background-color: #0d1117; }
-[data-testid="stMetricValue"] { color: #58a6ff !important; font-size: 2rem !important; }
-[data-testid="stMetricLabel"] { color: #c9d1d9 !important; font-weight: bold !important; }
-.stMetric {
-    background-color: #161b22;
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid #30363d;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.4);
-}
-h1, h2, h3 { color: #58a6ff; }
-.stDataFrame { border-radius: 10px; }
-.last-update { color: #8b949e; font-size: 0.9rem; margin-bottom: 20px; }
-.search-card { background-color: #161b22; border: 1px solid #30363d; padding: 25px; border-radius: 15px; margin-bottom: 25px; }
-.card-header h3 { margin: 0; color: #f0f6fc; font-size: 1.5rem; }
-.card-subtitle { color: #58a6ff; font-size: 1rem; margin-top: 5px; margin-bottom: 20px; }
-.timeline-container { border-left: 2px solid #30363d; margin-left: 15px; padding-left: 25px; position: relative; margin-top: 10px; }
-.timeline-item { position: relative; padding-bottom: 15px; color: #c9d1d9; font-size: 1.05rem; }
-.timeline-item::before { content: ''; position: absolute; left: -32px; top: 5px; width: 12px; height: 12px; background-color: #58a6ff; border-radius: 50%; border: 3px solid #161b22; }
-.timeline-item b { color: #f0f6fc; }
-.summary-box { background-color: #0d1117; padding: 15px; border-radius: 8px; margin-top: 15px; border-left: 4px solid #58a6ff; color: #c9d1d9; }
-</style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="Logistics Dashboard - Taco 2026", page_icon="🚚", layout="wide")
 
 def create_static_bar_chart(data, x_col, y_col):
-    chart = alt.Chart(data).mark_bar(color='#58a6ff').encode(
+    return alt.Chart(data).mark_bar(color='#58a6ff').encode(
         x=alt.X(f'{x_col}:N', title=x_col),
         y=alt.Y(f'{y_col}:Q', title=y_col),
         tooltip=[x_col, y_col]
-    ).properties(width='container', height=300).configure_axis(labelColor='#c9d1d9', titleColor='#c9d1d9').configure_view(strokeOpacity=0)
-    return chart
+    ).properties(width='container', height=300).configure_axis(labelColor='#c9d1d9', titleColor='#c9d1d9')
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def load_and_process_data():
     try:
-        # Load both sheets
         df1 = pd.read_csv(HOJA1_URL)
         df2 = pd.read_csv(HOJA2_URL)
     except Exception as e:
-        st.error(f"Error conectando a Google Sheets: {e}")
+        st.error(f"Error conectando a GSheets: {e}")
         st.stop()
 
-    # --- REPLICATING EXCEL FORMULAS IN PYTHON ---
-    
-    # 1. Clean NIC (AI and AJ logic)
-    # Finding NIC column by index or name
-    nic_col = df1.columns[2]
-    df1['AI_NIC_CLEAN'] = df1[nic_col].astype(str).str.replace(" ", "", regex=False)
-    
-    def clean_aj(val):
-        val = str(val).strip()
+    # Helper to find column by name or approximate index
+    def get_col(df, idx, keywords):
+        if idx < len(df.columns):
+            col_name = df.columns[idx]
+            if any(k.lower() in col_name.lower() for k in keywords): return col_name
+        for col in df.columns:
+            if any(k.lower() in col.lower() for k in keywords): return col
+        return df.columns[idx] if idx < len(df.columns) else None
+
+    # Mapping based on your Excel letters
+    C_NIC = get_col(df1, 2, ['NIC'])
+    H_NP_ALTA = get_col(df1, 7, ['NP Alta', 'Fecha y hora'])
+    O_FACTURA = get_col(df1, 14, ['Comprobante', 'Fecha y Hora'])
+    R_DESTINO = get_col(df1, 17, ['Destinatario', 'Nombre'])
+    S_FECHA = get_col(df1, 18, ['Fecha'])
+    AB_DESPACHO = get_col(df1, 27, ['LR Fecha', 'Hora'])
+    L_APROB = get_col(df1, 11, ['NP de aprob', 'final'])
+
+    # 1. NIC Cleaning (Logic AI & AJ)
+    def clean_nic(val):
+        val = str(val).replace(" ", "").strip()
         if val.isdigit() and len(val) > 9:
-            return val[3:-7]
+            # Excel MID(val, 4, len-7) is Python val[3 : -4]
+            return val[3:-4]
         return val
-    df1['AJ_NIC_FINAL'] = df1['AI_NIC_CLEAN'].apply(clean_aj)
+    df1['NIC_CLEAN'] = df1[C_NIC].apply(clean_nic)
 
-    # 2. Lookup in Hoja2 (AK and AL logic)
-    # Using iloc for B (1), F (5), O (14)
-    h2_lookup = df2.iloc[:, [1, 5, 14]].copy()
-    h2_lookup.columns = ['NIC_H2', 'AK_RECIBE', 'AL_ENTREGA']
-    h2_lookup['NIC_H2'] = h2_lookup['NIC_H2'].astype(str).str.strip()
+    # 2. Hoja2 Lookup (Logic AK & AL)
+    # B(1) is NIC, F(5) is Recibe, O(14) is Entrega
+    h2 = df2.iloc[:, [1, 5, 14]].copy()
+    h2.columns = ['NIC_H2', 'AK_RECIBE', 'AL_ENTREGA']
+    h2['NIC_H2'] = h2['NIC_H2'].astype(str).str.strip()
     
-    df = df1.merge(h2_lookup, left_on='AJ_NIC_FINAL', right_on='NIC_H2', how='left')
+    df = df1.merge(h2, left_on='NIC_CLEAN', right_on='NIC_H2', how='left')
 
-    # 3. Process Dates
-    # Columns: H(7), O(14), S(18), AB(27)
-    date_cols = {
-        'H': df.columns[7],   # NP Alta
-        'O': df.columns[14],  # Comprobante
-        'S': df.columns[18],  # Fecha
-        'AB': df.columns[27], # LR Fecha
-        'AK': 'AK_RECIBE',
-        'AL': 'AL_ENTREGA'
-    }
-    
-    for key, col_name in date_cols.items():
-        if col_name in df.columns:
-            df[col_name] = pd.to_datetime(df[col_name], dayfirst=True, errors='coerce')
+    # 3. Date Conversion
+    for col in [H_NP_ALTA, O_FACTURA, S_FECHA, AB_DESPACHO, 'AK_RECIBE']:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
 
-    # 4. AF: AMBA / CDS Logic
-    r_col = df.columns[17] # Column R
+    # 4. AF: Zone Logic
     def get_zone(val):
         v = str(val).lower()
         if "cruz del sur" in v: return "CDS"
         if any(x in v for x in ["kergaravat", "administracion", "freiria", "rejon"]): return "AMBA"
-        return ""
-    df['AF_ZONA'] = df[r_col].apply(get_zone)
+        return "Interior"
+    df['ZONA'] = df[R_DESTINO].apply(get_zone)
 
     # 5. AG: Status Logic
     def get_status(row):
-        if pd.notnull(row[date_cols['AB']]): return "Despachado"
-        if pd.notnull(row[date_cols['S']]): return "Pendiente de despacho"
-        if pd.notnull(row[date_cols['O']]): return "Pendiente de armado"
-        return ""
-    df['AG_ESTADO'] = df.apply(get_status, axis=1)
+        if pd.notnull(row[AB_DESPACHO]): return "Despachado"
+        if pd.notnull(row[S_FECHA]): return "Pendiente de despacho"
+        if pd.notnull(row[O_FACTURA]): return "Pendiente de armado"
+        return "S/D"
+    df['ESTADO'] = df.apply(get_status, axis=1)
 
     # 6. AH, AM, AN, AO Calculations
-    df['AH_DIAS_NP_LR'] = (df[date_cols['AB']] - df[date_cols['H']]).dt.days
-    df['AL_IS_PENDIENTE'] = df['AL_ENTREGA'].astype(str).str.lower().str.contains('pendiente', na=False)
-    df['AM_DIAS_CDS'] = (df[date_cols['AL']] - df[date_cols['AK']]).dt.days
-    df['AN_PENDIENTES_DIAS'] = np.where(
-        (df['AL_IS_PENDIENTE']) & (pd.notnull(df[date_cols['AK']])),
-        (TODAY - df[date_cols['AK']]).dt.days,
+    # AH: Days NP/LR (AB - H)
+    df['DIAS_NP_LR'] = (df[AB_DESPACHO] - df[H_NP_ALTA]).dt.days
+    
+    # AK/AL for CDS
+    df['AL_TEXT'] = df['AL_ENTREGA'].astype(str).str.lower()
+    df['AL_DATE'] = pd.to_datetime(df['AL_ENTREGA'], dayfirst=True, errors='coerce')
+    
+    # AM: Days CDS (AL - AK)
+    df['DIAS_CDS'] = (df['AL_DATE'] - df['AK_RECIBE']).dt.days
+    
+    # AN: Pendientes (Today - AK) if AL contains "pendiente"
+    df['DIAS_PENDIENTES_CDS'] = np.where(
+        (df['AL_TEXT'].str.contains('pendiente')) & (pd.notnull(df['AK_RECIBE'])),
+        (TODAY - df['AK_RECIBE']).dt.days,
         np.nan
     )
-    df['AO_LOGISTICA'] = (df[date_cols['AB']] - df[date_cols['O']]).dt.days
+    
+    # AO: Tiempos Logistica (AB - O)
+    df['TIEMPO_LOGISTICA'] = (df[AB_DESPACHO] - df[O_FACTURA]).dt.days
 
-    # Mapping to existing dashboard structure
-    df['AMBA/INTERIOR'] = df['AF_ZONA']
-    df['estado de pedido'] = df['AG_ESTADO']
-    df['Dias NP/LR'] = df['AH_DIAS_NP_LR']
-    df['dias de entrega'] = df['AM_DIAS_CDS']
-    df['Pendientes'] = df['AN_PENDIENTES_DIAS']
-    df['Tiempos Logistica'] = df['AO_LOGISTICA']
-    df['CDS recibe'] = df[date_cols['AK']]
+    # Map to Dashboard Names
+    df['AMBA/INTERIOR'] = df['ZONA']
+    df['estado de pedido'] = df['ESTADO']
+    df['Dias NP/LR'] = df['DIAS_NP_LR']
+    df['dias de entrega'] = df['DIAS_CDS']
+    df['Pendientes'] = df['DIAS_PENDIENTES_CDS']
+    df['Tiempos Logistica'] = df['TIEMPO_LOGISTICA']
+    df['CDS recibe'] = df['AK_RECIBE']
     df['CDS entrega'] = df['AL_ENTREGA']
-    df['Comprobante Fecha y Hora'] = df[date_cols['O']]
-    df['LR Fecha y Hora '] = df[date_cols['AB']]
+    df['Comprobante Fecha y Hora'] = df[O_FACTURA]
+    df['LR Fecha y Hora '] = df[AB_DESPACHO]
     
-    cmap = {
-        'NP_ALTA': date_cols['H'],
-        'NP_APROB': df.columns[11]
-    }
-    
-    return df, cmap
+    return df, {'NP_ALTA': H_NP_ALTA, 'NP_APROB': L_APROB}
 
 def main():
-    logo_path = 'Logo Ofar.png'
-    last_upd = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    st.markdown("""<style>.stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }</style>""", unsafe_allow_html=True)
+    df, cmap = load_and_process_data()
     
-    col_logo, col_title = st.columns([1, 4])
-    with col_logo:
-        if os.path.exists(logo_path): st.image(logo_path, width=150)
-    with col_title:
-        st.title("Dashboard de Logística - Taco 2026")
-        st.markdown(f"<div class='last-update'>🕒 Cerebro Python - Sincronizado con GSheets: {last_upd}</div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-    try:
-        df, cmap = load_and_process_data()
-    except Exception as e:
-        st.error(f"Error procesando datos: {e}")
-        return
-
-    if st.sidebar.button("🔄 Sincronizar ahora"):
-        st.cache_data.clear()
-        st.rerun()
+    st.title("🚚 Dashboard de Logística")
+    st.sidebar.button("🔄 Sincronizar GSheets", on_click=st.cache_data.clear)
 
     tab1, tab2, tab3 = st.tabs(["🔍 Buscador", "⚙️ Tiempos operativos", "📍 CDS"])
 
-    # --- TAB 1: BUSCADOR ---
     with tab1:
-        st.subheader("Buscador Global")
-        search_query = st.text_input("Buscar por Pedido, Cliente o Remito", "")
-        if search_query:
-            sq = search_query.strip()
-            mask = (
-                df['Nro de Pedido'].astype(str).str.endswith(sq, na=False) |
-                df['Cliente'].astype(str).str.contains(sq, case=False, na=False) |
-                df['Remito'].astype(str).str.contains(sq, case=False, na=False)
-            )
-            if len(sq) > 7:
-                mask = mask | df['AJ_NIC_FINAL'].astype(str).str.contains(sq, na=False)
-            
-            filtered_df = df[mask].drop_duplicates(subset=['Nro de Pedido', 'Remito'])
-            
-            if not filtered_df.empty:
-                for _, row in filtered_df.iterrows():
-                    is_cds = row['AMBA/INTERIOR'] == 'CDS'
-                    f_np = row[cmap['NP_ALTA']].strftime('%d/%m/%Y') if pd.notnull(row[cmap['NP_ALTA']]) else 'S/D'
-                    f_ap = row[cmap['NP_APROB']].strftime('%d/%m/%Y') if pd.notnull(row[cmap['NP_APROB']]) else 'S/D'
-                    f_fc = row['Comprobante Fecha y Hora'].strftime('%d/%m/%Y') if pd.notnull(row['Comprobante Fecha y Hora']) else 'S/D'
-                    f_dp = row['LR Fecha y Hora '].strftime('%d/%m/%Y') if pd.notnull(row['LR Fecha y Hora ']) else 'S/D'
-                    
-                    html_content = f'<div class="search-card">'
-                    html_content += f'<div class="card-header"><h3>{row["Cliente"]}</h3></div>'
-                    html_content += f'<div class="card-subtitle">Pedido: <b>{row["Nro de Pedido"]}</b> | Remito: <b>{row["Remito"]}</b> | Zona: <b>{row["AMBA/INTERIOR"]}</b></div>'
-                    html_content += f'<div class="timeline-container">'
-                    html_content += f'<div class="timeline-item">📅 <b>Alta Nota de Pedido:</b> {f_np}</div>'
-                    html_content += f'<div class="timeline-item">✅ <b>Aprobación Cuentas:</b> {f_ap}</div>'
-                    html_content += f'<div class="timeline-item">📑 <b>Facturación y Remito:</b> {f_fc}</div>'
-                    html_content += f'<div class="timeline-item">🚚 <b>Despacho (Logística):</b> {f_dp}</div>'
-                    if is_cds:
-                        f_ak = row['CDS recibe'].strftime('%d/%m/%Y') if pd.notnull(row['CDS recibe']) else 'S/D'
-                        f_al = str(row['CDS entrega'])
-                        html_content += f'<div class="timeline-item">📍 <b>Ingreso CDS:</b> {f_ak}</div>'
-                        html_content += f'<div class="timeline-item">🏁 <b>Entrega Final CDS:</b> {f_al}</div>'
-                        html_content += f'</div><div class="summary-box">'
-                        html_content += f'⏱️ <b>Tiempos:</b> Días Despacho: <b>{row["Dias NP/LR"]}</b> | Días CDS: <b>{row["dias de entrega"]}</b> | NIC: <b>{row["AJ_NIC_FINAL"]}</b>'
-                        html_content += f'</div>'
-                    else:
-                        html_content += f'</div><div class="summary-box">'
-                        html_content += f'⏱️ <b>Tiempos:</b> Días Despacho: <b>{row["Dias NP/LR"]}</b>'
-                        html_content += f'</div>'
-                    html_content += f'</div>'
-                    st.markdown(html_content, unsafe_allow_html=True)
-            else:
-                st.warning("No se encontraron resultados.")
+        sq = st.text_input("Buscar Pedido, Cliente o Remito").strip()
+        if sq:
+            mask = df['Nro de Pedido'].astype(str).str.endswith(sq) | df['Cliente'].astype(str).str.contains(sq, case=False) | df['Remito'].astype(str).str.contains(sq, case=False)
+            if len(sq) > 7: mask |= df['NIC_CLEAN'].astype(str).str.contains(sq)
+            res = df[mask].drop_duplicates(subset=['Nro de Pedido', 'Remito'])
+            for _, r in res.iterrows():
+                with st.container():
+                    st.markdown(f"### {r['Cliente']} | Pedido: {r['Nro de Pedido']}")
+                    st.write(f"**Estado:** {r['estado de pedido']} | **Zona:** {r['AMBA/INTERIOR']}")
+                    st.write(f"📅 Alta: {r[cmap['NP_ALTA']].strftime('%d/%m/%Y') if pd.notnull(r[cmap['NP_ALTA']]) else 'S/D'} | 🚚 Despacho: {r['LR Fecha y Hora '].strftime('%d/%m/%Y') if pd.notnull(r['LR Fecha y Hora ']) else 'S/D'}")
+                    if r['AMBA/INTERIOR'] == 'CDS':
+                        st.write(f"📍 CDS Recibe: {r['CDS recibe'].strftime('%d/%m/%Y') if pd.notnull(r['CDS recibe']) else 'S/D'} | 🏁 Entrega: {r['CDS entrega']}")
+                    st.markdown("---")
 
-        st.markdown("---")
-        st.subheader("Buscador por Cliente (Tiempos Promedio)")
-        client_list = sorted(df['Cliente'].dropna().unique())
-        selected_client = st.selectbox("Seleccione un Cliente", [""] + client_list)
-        if selected_client:
-            c_df = df[df['Cliente'] == selected_client]
-            avg_ah = c_df['Dias NP/LR'].mean()
-            is_any_cds = (c_df['AMBA/INTERIOR'] == 'CDS').any()
-            cds_c_df = c_df[c_df['AMBA/INTERIOR'] == 'CDS']
-            avg_am = cds_c_df['dias de entrega'].mean() if not cds_c_df.empty else np.nan
-            val_ah = f"{avg_ah:.2f}" if pd.notnull(avg_ah) else "S/D"
-            val_am = "No aplica" if not is_any_cds else (f"{avg_am:.2f}" if pd.notnull(avg_am) else "S/D")
-            cc1, cc2, cc3 = st.columns(3)
-            with cc1: st.metric("Promedio de NP a LR", val_ah)
-            with cc2: st.metric("Promedio CDS", val_am)
-            with cc3:
-                if pd.notnull(avg_ah):
-                    total_val = (avg_ah) + (avg_am if pd.notnull(avg_am) else 0)
-                    st.metric("Tiempo Total Promedio", f"{total_val:.2f}")
-                else: st.metric("Tiempo Total Promedio", "S/D")
-            st.markdown(f"**Listado de pedidos para {selected_client} (Muestra: {len(c_df)} pedidos)**")
-            st.dataframe(c_df[['Nro de Pedido', 'Remito', 'AMBA/INTERIOR', 'Dias NP/LR', 'dias de entrega']].sort_values('Nro de Pedido', ascending=False), use_container_width=True, hide_index=True)
-
-    # --- TAB 2: TIEMPOS OPERATIVOS ---
     with tab2:
-        st.subheader("📊 Pendientes de Armado y Despacho")
-        s_col1, s_col2, s_col3 = st.columns([1, 1, 1])
-        status_lower = df['estado de pedido'].astype(str).str.strip().str.lower()
-        with s_col1:
-            st.metric("Pendiente Armado", len(df[status_lower == "pendiente de armado"]))
-            if st.button("Ver detalle Armado"): st.session_state.view_detail_op = "pendiente de armado"
-        with s_col2:
-            st.metric("Pendiente de Despacho", len(df[status_lower == "pendiente de despacho"]))
-            if st.button("Ver detalle Despacho"): st.session_state.view_detail_op = "pendiente de despacho"
-        with s_col3:
-            if st.button("🧹 Limpiar detalles"): st.session_state.view_detail_op = None
-        if 'view_detail_op' in st.session_state and st.session_state.view_detail_op:
-            st.dataframe(df[status_lower == st.session_state.view_detail_op][['Nro de Pedido', 'Remito', 'Cliente', 'AMBA/INTERIOR', 'Dias NP/LR']], use_container_width=True, hide_index=True)
+        st.subheader("Pendientes de Gestión")
+        c1, c2 = st.columns(2)
+        c1.metric("Pendiente Armado", len(df[df['estado de pedido'] == "Pendiente de armado"]))
+        c2.metric("Pendiente Despacho", len(df[df['estado de pedido'] == "Pendiente de despacho"]))
+        
         st.markdown("---")
-        st.subheader("📅 Resumen de Actividad (Mensual / Diario)")
-        if 'Comprobante Fecha y Hora' in df.columns:
-            df_pivot = df.dropna(subset=['Comprobante Fecha y Hora']).copy()
-            df_pivot = df_pivot[(df_pivot['Comprobante Fecha y Hora'].dt.year == 2026) & (df_pivot['Comprobante Fecha y Hora'] <= TODAY)]
-            if not df_pivot.empty:
-                df_pivot['Fecha'] = df_pivot['Comprobante Fecha y Hora'].dt.date
-                df_pivot['Mes'] = df_pivot['Comprobante Fecha y Hora'].dt.strftime('%b').str.lower()
-                st_l = df_pivot['estado de pedido'].astype(str).str.strip().str.lower()
-                df_pivot['Total Remitos'] = 1
-                df_pivot['Pendientes Prep'] = (st_l == "pendiente de armado").astype(int)
-                df_pivot['Pendientes Envío'] = (st_l == "pendiente de despacho").astype(int)
-                pivot_table = df_pivot.groupby(['Mes', 'Fecha']).agg({'Total Remitos': 'sum', 'Pendientes Prep': 'sum', 'Pendientes Envío': 'sum'}).reset_index()
-                month_order = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
-                pivot_table['MesIdx'] = pivot_table['Mes'].apply(lambda x: month_order.index(x) if x in month_order else 99)
-                pivot_table = pivot_table.sort_values(['MesIdx', 'Fecha'], ascending=[False, False])
-                if not pivot_table.empty:
-                    sel_m = st.selectbox("Filtrar por Mes", pivot_table['Mes'].unique(), key="sel_m_op")
-                    m_detail = pivot_table[pivot_table['Mes'] == sel_m][['Fecha', 'Total Remitos', 'Pendientes Prep', 'Pendientes Envío']]
-                    def style_pending(v): return 'background-color: #ffcad4; color: black;' if v > 0 else ''
-                    try: styled_df = m_detail.style.map(style_pending, subset=['Pendientes Prep', 'Pendientes Envío'])
-                    except: styled_df = m_detail.style.applymap(style_pending, subset=['Pendientes Prep', 'Pendientes Envío'])
-                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        st.subheader("Tiempos Promedio")
+        avg_ah = df['Dias NP/LR'].mean()
+        avg_ao = df['Tiempos Logistica'].mean()
+        st.metric("Promedio NP a LR (Días)", f"{avg_ah:.2f}")
+        st.metric("Promedio Logística (Factura a Despacho)", f"{avg_ao:.2f}")
 
-        st.markdown("---")
-        st.subheader("⏱️ Tiempos de Despacho (Promedio Mensual)")
-        if 'Dias NP/LR' in df.columns:
-            df_tiempos = df.dropna(subset=['Dias NP/LR']).copy()
-            h_col = cmap['NP_ALTA']
-            df_tiempos = df_tiempos[(df_tiempos[h_col].dt.year == 2026) & (df_tiempos[h_col] <= TODAY)]
-            if not df_tiempos.empty:
-                st.metric("Promedio General Despacho 2026 (Días)", f"{df_tiempos['Dias NP/LR'].mean():.2f}")
-                df_tiempos['Mes Alta'] = df_tiempos[h_col].dt.strftime('%Y-%m')
-                p_mens = df_tiempos.groupby('Mes Alta')['Dias NP/LR'].mean().reset_index()
-                p_mens.columns = ['Mes', 'Promedio Días']
-                t_c1, t_c2 = st.columns([1, 2])
-                with t_c1: st.dataframe(p_mens.sort_values('Mes', ascending=False), use_container_width=True, hide_index=True)
-                with t_c2: st.altair_chart(create_static_bar_chart(p_mens, 'Mes', 'Promedio Días'), use_container_width=True)
-
-    # --- TAB 3: CDS ---
     with tab3:
-        st.subheader("🎯 Tiempos CDS (Promedio Mensual)")
+        st.subheader("Análisis CDS")
         if 'dias de entrega' in df.columns:
-            df_cds = df.dropna(subset=['dias de entrega']).copy()
-            ak_col = 'CDS recibe'
-            if ak_col in df_cds.columns:
-                df_cds = df_cds[(df_cds[ak_col].dt.year == 2026) & (df_cds[ak_col] <= TODAY)]
-                if not df_cds.empty:
-                    df_cds['Mes CDS'] = df_cds[ak_col].dt.strftime('%Y-%m')
-                    p_cds = df_cds.groupby('Mes CDS')['dias de entrega'].mean().reset_index()
-                    p_cds.columns = ['Mes', 'Promedio Días CDS']
-                    c_c1, c_c2 = st.columns([1, 2])
-                    with c_c1: st.dataframe(p_cds.sort_values('Mes', ascending=False), use_container_width=True, hide_index=True)
-                    with c_c2: st.altair_chart(create_static_bar_chart(p_cds, 'Mes', 'Promedio Días CDS'), use_container_width=True)
+            st.metric("Promedio Días CDS", f"{df['dias de entrega'].mean():.2f}")
+        
         st.markdown("---")
-        st.subheader("📋 Listado de Pendientes CDS (> 10 días)")
-        cds_p = df[(df['AL_IS_PENDIENTE']) & (pd.notnull(df['Pendientes']))].copy()
-        if not cds_p.empty:
-            cds_p = cds_p[cds_p['Pendientes'] > 10]
-            if not cds_p.empty:
-                st.dataframe(cds_p[['Nro de Pedido', 'Cliente', 'Remito', 'AJ_NIC_FINAL', 'Pendientes']].sort_values('Pendientes', ascending=False), use_container_width=True, hide_index=True)
-            else: st.info("✅ No hay pendientes CDS > 10 días.")
-        else: st.info("✅ No hay pedidos marcados como Pendiente en CDS.")
-        st.markdown("---")
+        st.subheader("📋 Pendientes CDS (> 10 días)")
+        pend_cds = df[(df['AMBA/INTERIOR'] == 'CDS') & (df['Pendientes'] > 10)]
+        if not pend_cds.empty:
+            st.dataframe(pend_cds[['Nro de Pedido', 'Cliente', 'Pendientes']].sort_values('Pendientes', ascending=False), use_container_width=True)
+        else: st.info("No hay pendientes críticos.")
+        
         st.subheader("🚫 Anulados")
-        anul_df = df[df['CDS entrega'].astype(str).str.strip().str.lower().str.contains('anulado', na=False)]
-        if not anul_df.empty:
-            st.dataframe(anul_df[['Nro de Pedido', 'Cliente', 'Remito', 'AJ_NIC_FINAL', 'AMBA/INTERIOR']], use_container_width=True, hide_index=True)
-        else: st.info("✅ No hay pedidos marcados como Anulado.")
+        anul = df[df['AL_TEXT'].str.contains('anulado', na=False)]
+        if not anul.empty: st.dataframe(anul[['Nro de Pedido', 'Cliente', 'Remito']], use_container_width=True)
+        else: st.info("No hay anulados.")
 
 if __name__ == "__main__": main()
