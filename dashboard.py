@@ -122,11 +122,12 @@ def load_and_process_data():
     }
 
     # Status Logic (as requested)
-    # Pendiente Armado: Column Q (Bultos) is null
-    # Pendiente Despacho: Column AB (LR) is null
+    # Pendiente Armado: Column Q (Bultos) is null or 0
+    # Pendiente Despacho: Column AB (LR) is null but has Bultos > 0
     def get_custom_status(row):
+        bultos = pd.to_numeric(row[MAP_COLS['BULTOS']], errors='coerce')
         if pd.notnull(row[MAP_COLS['DESPACHO']]): return "Despachado"
-        if pd.notnull(row[MAP_COLS['BULTOS']]): return "Pendiente de despacho"
+        if pd.notnull(bultos) and bultos > 0: return "Pendiente de despacho"
         if pd.notnull(row[MAP_COLS['FACTURA']]): return "Pendiente de armado"
         return "S/D"
     
