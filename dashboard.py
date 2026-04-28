@@ -105,31 +105,34 @@ def load_and_process_data():
             return df.columns[idx]
         return default_name
 
-    # Column Mapping by Index (more robust for encoding issues)
+    # Column Mapping by Index
     MAP_COLS = {
         'NP_ALTA': find_col(7, 'NP Alta -Fecha y hora '),
         'NP_APROB': find_col(11, 'NP de aprobaci\u00f3n final -Fecha y hora '),
-        'FACTURA': find_col(14, 'Comprobante Fecha y Hora'),
-        'FECHA': find_col(18, 'Referencia Remito'),
-        'DESPACHO': find_col(27, 'LR Fecha y Hora '),
+        'FACTURA': find_col(14, 'Comprobante Fecha y Hora'), # O
+        'BULTOS': find_col(16, 'Cantidad de Bultos'), # Q
+        'DESPACHO': find_col(27, 'LR Fecha y Hora '), # AB
         'ZONA': find_col(31, 'AMBA/INTERIOR'),
-        'ESTADO': find_col(32, 'estado de pedido'),
+        'ESTADO_SHEET': find_col(32, 'estado de pedido'),
         'DIAS_NP_LR': find_col(33, 'Dias NP/LR'),
         'CDS_RECIBE': find_col(36, 'CDS recibe'),
         'CDS_ENTREGA': find_col(37, 'CDS entrega'),
         'DIAS_CDS': find_col(38, 'dias de entrega'),
-        'PENDIENTES': find_col(39, 'Pendientes'),
-        'TIEMPO_LOG': find_col(40, 'Tiempos Logistica')
+        'PENDIENTES_CDS': find_col(39, 'Pendientes')
     }
 
-    # NIC Cleaning for Search
-    def clean_nic(val):
-        val = str(val).replace(" ", "").strip()
-        if val.isdigit() and len(val) > 9: return val[3:-4]
-        return val
-    df['NIC_CLEAN'] = df.iloc[:, 2].apply(clean_nic) # Column 2 is NIC
+    # Status Logic (as requested)
+    # Pendiente Armado: Column Q (Bultos) is null
+    # Pendiente Despacho: Column AB (LR) is null
+    def get_custom_status(row):
+        if pd.notnull(row[MAP_COLS['DESPACHO']]): return "Despachado"
+        if pd.notnull(row[MAP_COLS['BULTOS']]): return "Pendiente de despacho"
+        if pd.notnull(row[MAP_COLS['FACTURA']]): return "Pendiente de armado"
+        return "S/D"
+    
+    df['estado de pedido'] = df.apply(get_custom_status, axis=1)
 
-    # Date Conversion for DISPLAY only
+    # Date Conversion for DISPLAY
     cmap = {}
     for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE']:
         col_name = MAP_COLS[key]
@@ -137,17 +140,15 @@ def load_and_process_data():
         df[new_col] = pd.to_datetime(df[col_name], errors='coerce')
         cmap[key] = new_col
 
-    # Consistency names for the rest of the app
+    # Consistency names
     df['AMBA/INTERIOR'] = df[MAP_COLS['ZONA']]
-    df['estado de pedido'] = df[MAP_COLS['ESTADO']]
     df['Dias NP/LR'] = pd.to_numeric(df[MAP_COLS['DIAS_NP_LR']], errors='coerce')
     df['dias de entrega'] = pd.to_numeric(df[MAP_COLS['DIAS_CDS']], errors='coerce')
-    df['Pendientes'] = pd.to_numeric(df[MAP_COLS['PENDIENTES']], errors='coerce')
-    df['Tiempos Logistica'] = pd.to_numeric(df[MAP_COLS['TIEMPO_LOG']], errors='coerce')
+    df['Pendientes'] = pd.to_numeric(df[MAP_COLS['PENDIENTES_CDS']], errors='coerce')
     df['CDS recibe'] = df[MAP_COLS['CDS_RECIBE']]
     df['CDS entrega'] = df[MAP_COLS['CDS_ENTREGA']]
-    df['Comprobante Fecha y Hora'] = df[MAP_COLS['FACTURA']]
-    df['LR Fecha y Hora '] = df[MAP_COLS['DESPACHO']]
+    df['Remito Date'] = df[MAP_COLS['FACTURA']]
+    df['Bultos'] = df[MAP_COLS['BULTOS']]
     
     return df, cmap
 
@@ -163,7 +164,19 @@ def main():
         st.markdown(f"<div class='last-update'>🕒 Sincronizado: {last_upd}</div>", unsafe_allow_html=True)
 
     df, cmap = load_and_process_data()
-    st.sidebar.button("🔄 Actualizar", on_click=st.cache_data.clear)
+    
+    # NIC Cleaning (Restored)
+    def clean_nic_func(val):
+        val = str(val).replace(" ", "").strip()
+        if val.isdigit() and len(val) > 9: return val[3:-4]
+        return val
+    df['NIC_CLEAN'] = df.iloc[:, 2].apply(clean_nic_func)
+
+    # Sidebar Tools
+    st.sidebar.button("🔄 Actualizar Datos", on_click=st.cache_data.clear)
+    if st.sidebar.button("🧹 Limpiar Filtros"):
+        st.cache_data.clear()
+        st.rerun()
 
     tab1, tab2, tab3 = st.tabs(["🔍 Buscador", "⚙️ Tiempos operativos", "📍 CDS"])
 
@@ -172,7 +185,10 @@ def main():
         st.subheader("Buscador Global")
         sq = st.text_input("Pedido, Cliente o Remito", "")
         if sq:
-            mask = df['Nro de Pedido'].astype(str).str.endswith(sq) | df['Cliente'].astype(str).str.contains(sq, case=False) | df['Remito'].astype(str).str.contains(sq, case=False)
+            # Use original col names for search if needed, but 'Nro de Pedido', 'Cliente', 'Remito' are standard
+            mask = df['Nro de Pedido'].astype(str).str.contains(sq, case=False) | \
+                   df['Cliente'].astype(str).str.contains(sq, case=False) | \
+                   df['Remito'].astype(str).str.contains(sq, case=False)
             if len(sq) > 7: mask |= df['NIC_CLEAN'].astype(str).str.contains(sq)
             res = df[mask].drop_duplicates(subset=['Nro de Pedido', 'Remito'])
             
@@ -198,53 +214,47 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.subheader("Buscador por Cliente (Promedios)")
-        clist = sorted(df['Cliente'].dropna().unique())
-        sel_c = st.selectbox("Seleccione un Cliente", [""] + clist)
-        if sel_c:
-            cdf = df[df['Cliente'] == sel_c]
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Promedio NP a LR", f"{cdf['Dias NP/LR'].mean():.2f}" if pd.notnull(cdf['Dias NP/LR'].mean()) else "S/D")
-            cds_cdf = cdf[cdf['AMBA/INTERIOR'] == 'CDS']
-            c2.metric("Promedio CDS", f"{cds_cdf['dias de entrega'].mean():.2f}" if not cds_cdf.empty else "No aplica")
-            c3.metric("Total Pedidos", len(cdf))
-            st.dataframe(cdf[['Nro de Pedido', 'Remito', 'AMBA/INTERIOR', 'Dias NP/LR', 'dias de entrega']].sort_values('Nro de Pedido', ascending=False), use_container_width=True, hide_index=True)
-
     # --- TAB 2: TIEMPOS OPERATIVOS ---
     with tab2:
         st.subheader("📊 Pendientes de Gestión")
-        sc1, sc2 = st.columns(2)
-        sc1.metric("Pendiente Armado", len(df[df['estado de pedido'] == "Pendiente de armado"]))
-        sc2.metric("Pendiente Despacho", len(df[df['estado de pedido'] == "Pendiente de despacho"]))
+        p_armado = df[df['estado de pedido'] == "Pendiente de armado"]
+        p_despacho = df[df['estado de pedido'] == "Pendiente de despacho"]
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Pendiente Armado (Sin Bultos)", len(p_armado))
+            with st.expander("Ver detalle Armado"):
+                st.dataframe(p_armado[['Nro de Pedido', 'Cliente', 'Remito', 'Remito Date']], use_container_width=True, hide_index=True)
+        
+        with c2:
+            st.metric("Pendiente Despacho (Sin LR)", len(p_despacho))
+            with st.expander("Ver detalle Despacho"):
+                st.dataframe(p_despacho[['Nro de Pedido', 'Cliente', 'Remito', 'Bultos']], use_container_width=True, hide_index=True)
         
         st.markdown("---")
-        st.subheader("📅 Actividad Diaria (2026)")
-        # Base activity on NP_ALTA to include all orders (even those not yet invoiced)
-        if pd.notnull(df[cmap['NP_ALTA']]).any():
-            act_df = df.dropna(subset=[cmap['NP_ALTA']]).copy()
-            act_df = act_df[act_df[cmap['NP_ALTA']].dt.year == 2026]
+        st.subheader("📅 Actividad Diaria (Remitido por día)")
+        
+        # Activity based on Column O (Remito Date)
+        if pd.notnull(df[cmap['FACTURA']]).any():
+            act_df = df.dropna(subset=[cmap['FACTURA']]).copy()
+            act_df = act_df[act_df[cmap['FACTURA']].dt.year == 2026]
             
-            # Month grouping
-            act_df['Mes'] = act_df[cmap['NP_ALTA']].dt.strftime('%Y-%m')
-            act_df['Fecha'] = act_df[cmap['NP_ALTA']].dt.strftime('%d/%m/%Y')
+            act_df['Mes'] = act_df[cmap['FACTURA']].dt.strftime('%Y-%m')
+            act_df['Fecha'] = act_df[cmap['FACTURA']].dt.strftime('%d/%m/%Y')
             
-            months = sorted(act_df['Mes'].unique(), reverse=True)
-            sel_month = st.selectbox("Seleccione el Mes", months)
-            
-            m_data = act_df[act_df['Mes'] == sel_month].sort_values(cmap['NP_ALTA'], ascending=False)
+            sel_month = st.selectbox("Seleccione el Mes para Actividad", sorted(act_df['Mes'].unique(), reverse=True))
+            m_data = act_df[act_df['Mes'] == sel_month].sort_values(cmap['FACTURA'], ascending=False)
             
             def color_pending(s):
                 return ['background-color: #ffb3ba; color: black' if v in ['Pendiente de armado', 'Pendiente de despacho'] else '' for v in s]
 
-            # Detailed table with styling
             st.dataframe(
-                m_data[['Fecha', 'Nro de Pedido', 'Cliente', 'estado de pedido', 'Dias NP/LR']].style.apply(color_pending, subset=['estado de pedido'], axis=0),
+                m_data[['Fecha', 'Nro de Pedido', 'Cliente', 'Remito', 'estado de pedido']].style.apply(color_pending, subset=['estado de pedido'], axis=0),
                 use_container_width=True,
                 hide_index=True
             )
         else:
-            st.info("No hay datos de actividad para 2026.")
+            st.info("No hay remitos registrados en 2026 para mostrar actividad.")
 
         st.markdown("---")
         st.subheader("⏱️ Promedios Mensuales")
