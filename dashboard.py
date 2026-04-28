@@ -95,88 +95,63 @@ def create_static_bar_chart(data, x_col, y_col):
 @st.cache_data(ttl=300)
 def load_and_process_data():
     try:
-        df1 = pd.read_csv(HOJA1_URL)
-        df2 = pd.read_csv(HOJA2_URL)
+        df = pd.read_csv(HOJA1_URL, low_memory=False)
     except Exception as e:
         st.error(f"Error conectando a GSheets: {e}")
         st.stop()
 
-    def get_col(df, idx, keywords):
-        if idx < len(df.columns):
-            col_name = df.columns[idx]
-            if any(k.lower() in col_name.lower() for k in keywords): return col_name
-        for col in df.columns:
-            if any(k.lower() in col.lower() for k in keywords): return col
-        return df.columns[idx] if idx < len(df.columns) else None
+    # Column Mapping (based on Hoja1 structure)
+    # We use the names as they appear in the CSV export
+    MAP = {
+        'NP_ALTA': 'NP Alta -Fecha y hora ',
+        'NP_APROB': 'NP de aprobaci\u00f3n final -Fecha y hora ',
+        'FACTURA': 'Comprobante Fecha y Hora',
+        'FECHA': 'Referencia Remito',
+        'DESPACHO': 'LR Fecha y Hora ',
+        'ZONA': 'AMBA/INTERIOR',
+        'ESTADO': 'estado de pedido',
+        'DIAS_NP_LR': 'Dias NP/LR',
+        'DIAS_CDS': 'dias de entrega',
+        'PENDIENTES': 'Pendientes',
+        'TIEMPO_LOG': 'Tiempos Logistica',
+        'CDS_RECIBE': 'CDS recibe',
+        'CDS_ENTREGA': 'CDS entrega'
+    }
 
-    # Column Mapping
-    C_NIC = get_col(df1, 2, ['NIC'])
-    H_NP_ALTA = get_col(df1, 7, ['NP Alta', 'Fecha y hora'])
-    L_APROB = get_col(df1, 11, ['NP de aprob', 'final'])
-    O_FACTURA = get_col(df1, 14, ['Comprobante', 'Fecha y Hora'])
-    R_DESTINO = get_col(df1, 17, ['Destinatario', 'Nombre'])
-    S_FECHA = get_col(df1, 18, ['Fecha'])
-    AB_DESPACHO = get_col(df1, 27, ['LR Fecha', 'Hora'])
-
-    # 1. NIC Cleaning
+    # NIC Cleaning for Search
     def clean_nic(val):
         val = str(val).replace(" ", "").strip()
         if val.isdigit() and len(val) > 9: return val[3:-4]
         return val
-    df1['NIC_CLEAN'] = df1[C_NIC].apply(clean_nic)
+    df['NIC_CLEAN'] = df['NIC'].apply(clean_nic)
 
-    # 2. Hoja2 Lookup
-    h2 = df2.iloc[:, [1, 5, 14]].copy()
-    h2.columns = ['NIC_H2', 'AK_RECIBE', 'AL_ENTREGA']
-    h2['NIC_H2'] = h2['NIC_H2'].astype(str).str.strip()
-    df = df1.merge(h2, left_on='NIC_CLEAN', right_on='NIC_H2', how='left')
-
-    # 3. Date Conversion
-    for col in [H_NP_ALTA, L_APROB, O_FACTURA, S_FECHA, AB_DESPACHO, 'AK_RECIBE']:
+    # Date Conversion for DISPLAY only (using American format from GSheets CSV)
+    # We use errors='coerce' so if it fails, it remains as is or NaT
+    for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE']:
+        col = MAP[key]
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
+            # Try to parse for better display, but we don't rely on this for math anymore
+            df[col + '_DT'] = pd.to_datetime(df[col], errors='coerce')
 
-    # 4. AF: Zone
-    def get_zone(val):
-        v = str(val).lower()
-        if "cruz del sur" in v: return "CDS"
-        if any(x in v for x in ["kergaravat", "administracion", "freiria", "rejon"]): return "AMBA"
-        return "Interior"
-    df['ZONA'] = df[R_DESTINO].apply(get_zone)
-
-    # 5. AG: Status
-    def get_status(row):
-        if pd.notnull(row[AB_DESPACHO]): return "Despachado"
-        if pd.notnull(row[S_FECHA]): return "Pendiente de despacho"
-        if pd.notnull(row[O_FACTURA]): return "Pendiente de armado"
-        return "S/D"
-    df['ESTADO'] = df.apply(get_status, axis=1)
-
-    # 6. Calculations
-    df['DIAS_NP_LR'] = (df[AB_DESPACHO] - df[H_NP_ALTA]).dt.days
-    df['AL_TEXT'] = df['AL_ENTREGA'].astype(str).str.lower()
-    df['AL_DATE'] = pd.to_datetime(df['AL_ENTREGA'], dayfirst=True, errors='coerce')
-    df['DIAS_CDS'] = (df['AL_DATE'] - df['AK_RECIBE']).dt.days
-    df['DIAS_PENDIENTES_CDS'] = np.where(
-        (df['AL_TEXT'].str.contains('pendiente')) & (pd.notnull(df['AK_RECIBE'])),
-        (TODAY - df['AK_RECIBE']).dt.days,
-        np.nan
-    )
-    df['TIEMPO_LOGISTICA'] = (df[AB_DESPACHO] - df[O_FACTURA]).dt.days
-
-    # Consistency names
-    df['AMBA/INTERIOR'] = df['ZONA']
-    df['estado de pedido'] = df['ESTADO']
-    df['Dias NP/LR'] = df['DIAS_NP_LR']
-    df['dias de entrega'] = df['DIAS_CDS']
-    df['Pendientes'] = df['DIAS_PENDIENTES_CDS']
-    df['Tiempos Logistica'] = df['TIEMPO_LOGISTICA']
-    df['CDS recibe'] = df['AK_RECIBE']
-    df['CDS entrega'] = df['AL_ENTREGA']
-    df['Comprobante Fecha y Hora'] = df[O_FACTURA]
-    df['LR Fecha y Hora '] = df[AB_DESPACHO]
+    # Consistency names for the rest of the app
+    df['AMBA/INTERIOR'] = df[MAP['ZONA']]
+    df['estado de pedido'] = df[MAP['ESTADO']]
+    df['Dias NP/LR'] = pd.to_numeric(df[MAP['DIAS_NP_LR']], errors='coerce')
+    df['dias de entrega'] = pd.to_numeric(df[MAP['DIAS_CDS']], errors='coerce')
+    df['Pendientes'] = pd.to_numeric(df[MAP['PENDIENTES']], errors='coerce')
+    df['Tiempos Logistica'] = pd.to_numeric(df[MAP['TIEMPO_LOG']], errors='coerce')
+    df['CDS recibe'] = df[MAP['CDS_RECIBE']]
+    df['CDS entrega'] = df[MAP['CDS_ENTREGA']]
+    df['Comprobante Fecha y Hora'] = df[MAP['FACTURA']]
+    df['LR Fecha y Hora '] = df[MAP['DESPACHO']]
     
-    return df, {'NP_ALTA': H_NP_ALTA, 'NP_APROB': L_APROB, 'FACTURA': O_FACTURA, 'DESPACHO': AB_DESPACHO}
+    return df, {
+        'NP_ALTA': MAP['NP_ALTA'] + '_DT', 
+        'NP_APROB': MAP['NP_APROB'] + '_DT', 
+        'FACTURA': MAP['FACTURA'] + '_DT', 
+        'DESPACHO': MAP['DESPACHO'] + '_DT',
+        'CDS_RECIBE': MAP['CDS_RECIBE'] + '_DT'
+    }
 
 def main():
     logo_path = 'Logo Ofar.png'
@@ -218,7 +193,7 @@ def main():
                         <div class="timeline-item">✅ <b>Aprobación Cuentas:</b> {f_ap}</div>
                         <div class="timeline-item">📑 <b>Facturación y Remito:</b> {f_fc}</div>
                         <div class="timeline-item">🚚 <b>Despacho (Logística):</b> {f_dp}</div>
-                        {"<div class='timeline-item'>📍 <b>Ingreso CDS:</b> " + r['CDS recibe'].strftime('%d/%m/%Y') + "</div>" if pd.notnull(r['CDS recibe']) else ""}
+                        {"<div class='timeline-item'>📍 <b>Ingreso CDS:</b> " + r[cmap['CDS_RECIBE']].strftime('%d/%m/%Y') + "</div>" if pd.notnull(r[cmap['CDS_RECIBE']]) else ""}
                         {"<div class='timeline-item'>🏁 <b>Entrega Final CDS:</b> " + str(r['CDS entrega']) + "</div>" if r['AMBA/INTERIOR'] == 'CDS' else ""}
                     </div>
                     <div class="summary-box">⏱️ Despacho: <b>{r['Dias NP/LR']} días</b> | NIC: <b>{r['NIC_CLEAN']}</b></div>
@@ -269,9 +244,9 @@ def main():
     # --- TAB 3: CDS ---
     with tab3:
         st.subheader("🎯 Rendimiento CDS")
-        if pd.notnull(df['CDS recibe']).any():
-            df_c = df.dropna(subset=['dias de entrega', 'CDS recibe']).copy()
-            df_c['Mes'] = df_c['CDS recibe'].dt.strftime('%Y-%m')
+        if pd.notnull(df[cmap['CDS_RECIBE']]).any():
+            df_c = df.dropna(subset=['dias de entrega', cmap['CDS_RECIBE']]).copy()
+            df_c['Mes'] = df_c[cmap['CDS_RECIBE']].dt.strftime('%Y-%m')
             prom_c = df_c.groupby('Mes')['dias de entrega'].mean().reset_index()
             cc1, cc2 = st.columns([1, 2])
             with cc1: st.dataframe(prom_c.sort_values('Mes', ascending=False), hide_index=True)
@@ -284,7 +259,7 @@ def main():
         else: st.info("No hay pendientes críticos.")
         
         st.subheader("🚫 Anulados")
-        anul = df[df['AL_TEXT'].str.contains('anulado', na=False)]
+        anul = df[df['CDS entrega'].astype(str).str.lower().str.contains('anulado', na=False)]
         if not anul.empty: st.dataframe(anul[['Nro de Pedido', 'Cliente', 'Remito', 'AMBA/INTERIOR']], use_container_width=True)
         else: st.info("No hay anulados.")
 
