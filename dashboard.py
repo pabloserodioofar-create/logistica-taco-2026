@@ -246,11 +246,11 @@ def main():
             sel_month = st.selectbox("Seleccione el Mes para Actividad", sorted(act_df['Mes'].unique(), reverse=True))
             m_data = act_df[act_df['Mes'] == sel_month].copy()
             
-            # Aggregate by date
+            # Aggregate by date using the calculated status for consistency
             summary = m_data.groupby(['Fecha_Raw', 'Fecha_Str']).agg(
                 Remitos_diarios=('Nro de Pedido', 'count'),
-                Pendiente_armado=('Bultos', lambda x: (pd.isnull(x) | (x == 0)).sum()),
-                Pendiente_despacho=('LR Fecha y Hora ', lambda x: pd.isnull(x).sum())
+                Pendiente_armado=('estado de pedido', lambda x: (x == 'Pendiente de armado').sum()),
+                Pendiente_despacho=('estado de pedido', lambda x: (x == 'Pendiente de despacho').sum())
             ).reset_index().sort_values('Fecha_Raw', ascending=False)
             
             # Final columns as requested
