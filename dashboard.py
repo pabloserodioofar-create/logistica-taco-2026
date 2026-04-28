@@ -118,7 +118,8 @@ def load_and_process_data():
         'CDS_RECIBE': find_col(36, 'CDS recibe'),
         'CDS_ENTREGA': find_col(37, 'CDS entrega'),
         'DIAS_CDS': find_col(38, 'dias de entrega'),
-        'PENDIENTES_CDS': find_col(39, 'Pendientes')
+        'PENDIENTES_CDS': find_col(39, 'Pendientes'),
+        'TIEMPO_LOG': find_col(40, 'Tiempos Logistica')
     }
 
     # Status Logic (as requested)
