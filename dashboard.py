@@ -8,10 +8,10 @@ import altair as alt
 # Use dynamic today's date
 TODAY = datetime.now()
 
-# Google Sheets URLs
-BASE_URL = "https://docs.google.com/spreadsheets/d/1ztQKIs8KNf5QZPPDItP9S63JvrmIgCmiQvFLtIKm74k/export?format=csv"
-HOJA1_URL = f"{BASE_URL}&gid=0"
-HOJA2_URL = f"{BASE_URL}&gid=943820696"
+# Google Sheets IDs
+SHEET_ID = "1ztQKIs8KNf5QZPPDItP9S63JvrmIgCmiQvFLtIKm74k"
+HOJA1_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=1491104641"
+HOJA2_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=943820696"
 
 # Page Configuration
 st.set_page_config(
@@ -69,11 +69,10 @@ def load_and_process_data():
     # --- REPLICATING EXCEL FORMULAS IN PYTHON ---
     
     # 1. Clean NIC (AI and AJ logic)
-    # AI: Remove spaces from Col C (assuming 'NIC' or index 2)
-    nic_col = df1.columns[2] # Adjust if NIC is not the 3rd column
+    # Finding NIC column by index or name
+    nic_col = df1.columns[2]
     df1['AI_NIC_CLEAN'] = df1[nic_col].astype(str).str.replace(" ", "", regex=False)
     
-    # AJ: Extrae if numeric and length > 9
     def clean_aj(val):
         val = str(val).strip()
         if val.isdigit() and len(val) > 9:
@@ -82,15 +81,15 @@ def load_and_process_data():
     df1['AJ_NIC_FINAL'] = df1['AI_NIC_CLEAN'].apply(clean_aj)
 
     # 2. Lookup in Hoja2 (AK and AL logic)
-    # Hoja2!B is Col 1, Hoja2!F is Col 5, Hoja2!O is Col 14
+    # Using iloc for B (1), F (5), O (14)
     h2_lookup = df2.iloc[:, [1, 5, 14]].copy()
     h2_lookup.columns = ['NIC_H2', 'AK_RECIBE', 'AL_ENTREGA']
     h2_lookup['NIC_H2'] = h2_lookup['NIC_H2'].astype(str).str.strip()
     
-    # Merge Hoja1 and Hoja2
     df = df1.merge(h2_lookup, left_on='AJ_NIC_FINAL', right_on='NIC_H2', how='left')
 
     # 3. Process Dates
+    # Columns: H(7), O(14), S(18), AB(27)
     date_cols = {
         'H': df.columns[7],   # NP Alta
         'O': df.columns[14],  # Comprobante
@@ -105,8 +104,7 @@ def load_and_process_data():
             df[col_name] = pd.to_datetime(df[col_name], dayfirst=True, errors='coerce')
 
     # 4. AF: AMBA / CDS Logic
-    # Looking for keywords in R (Col 17)
-    r_col = df.columns[17]
+    r_col = df.columns[17] # Column R
     def get_zone(val):
         v = str(val).lower()
         if "cruz del sur" in v: return "CDS"
@@ -122,28 +120,18 @@ def load_and_process_data():
         return ""
     df['AG_ESTADO'] = df.apply(get_status, axis=1)
 
-    # 6. AH, AM, AN, AO: Days Calculations
-    # AH: Days(AB, H)
+    # 6. AH, AM, AN, AO Calculations
     df['AH_DIAS_NP_LR'] = (df[date_cols['AB']] - df[date_cols['H']]).dt.days
-    
-    # AL logic: ensure it can handle "pendiente" string vs date
     df['AL_IS_PENDIENTE'] = df['AL_ENTREGA'].astype(str).str.lower().str.contains('pendiente', na=False)
-    
-    # AM: Days(AL, AK)
-    # We only calculate if AL is a valid date
     df['AM_DIAS_CDS'] = (df[date_cols['AL']] - df[date_cols['AK']]).dt.days
-    
-    # AN: Days Pending = Today - AK (if AL is pendiente)
     df['AN_PENDIENTES_DIAS'] = np.where(
         (df['AL_IS_PENDIENTE']) & (pd.notnull(df[date_cols['AK']])),
         (TODAY - df[date_cols['AK']]).dt.days,
         np.nan
     )
-    
-    # AO: Days(AB, O)
     df['AO_LOGISTICA'] = (df[date_cols['AB']] - df[date_cols['O']]).dt.days
 
-    # Map internal names to display names for existing dashboard logic
+    # Mapping to existing dashboard structure
     df['AMBA/INTERIOR'] = df['AF_ZONA']
     df['estado de pedido'] = df['AG_ESTADO']
     df['Dias NP/LR'] = df['AH_DIAS_NP_LR']
@@ -155,10 +143,9 @@ def load_and_process_data():
     df['Comprobante Fecha y Hora'] = df[date_cols['O']]
     df['LR Fecha y Hora '] = df[date_cols['AB']]
     
-    # Store dynamic columns map for the search cards
     cmap = {
         'NP_ALTA': date_cols['H'],
-        'NP_APROB': df.columns[11] # Assuming L is approx 11th col
+        'NP_APROB': df.columns[11]
     }
     
     return df, cmap
@@ -243,11 +230,11 @@ def main():
         if selected_client:
             c_df = df[df['Cliente'] == selected_client]
             avg_ah = c_df['Dias NP/LR'].mean()
-            is_any_cds = c_df['AMBA/INTERIOR'] == 'CDS'
+            is_any_cds = (c_df['AMBA/INTERIOR'] == 'CDS').any()
             cds_c_df = c_df[c_df['AMBA/INTERIOR'] == 'CDS']
             avg_am = cds_c_df['dias de entrega'].mean() if not cds_c_df.empty else np.nan
             val_ah = f"{avg_ah:.2f}" if pd.notnull(avg_ah) else "S/D"
-            val_am = "No aplica" if not is_any_cds.any() else (f"{avg_am:.2f}" if pd.notnull(avg_am) else "S/D")
+            val_am = "No aplica" if not is_any_cds else (f"{avg_am:.2f}" if pd.notnull(avg_am) else "S/D")
             cc1, cc2, cc3 = st.columns(3)
             with cc1: st.metric("Promedio de NP a LR", val_ah)
             with cc2: st.metric("Promedio CDS", val_am)
@@ -302,7 +289,6 @@ def main():
         st.subheader("⏱️ Tiempos de Despacho (Promedio Mensual)")
         if 'Dias NP/LR' in df.columns:
             df_tiempos = df.dropna(subset=['Dias NP/LR']).copy()
-            # Use Column H for grouping
             h_col = cmap['NP_ALTA']
             df_tiempos = df_tiempos[(df_tiempos[h_col].dt.year == 2026) & (df_tiempos[h_col] <= TODAY)]
             if not df_tiempos.empty:
