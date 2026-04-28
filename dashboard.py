@@ -94,7 +94,6 @@ def create_static_bar_chart(data, x_col, y_col):
 @st.cache_data(ttl=600)
 def load_data():
     try:
-        # Load from Google Sheets
         df = pd.read_csv(SHEET_URL)
     except Exception as e:
         st.warning(f"No se pudo conectar a Google Sheets, intentando carga local... (Error: {e})")
@@ -255,7 +254,19 @@ def main():
                 pivot_table = pivot_table.sort_values(['MesIdx', 'Fecha'], ascending=[False, False])
                 sel_m = st.selectbox("Filtrar por Mes", pivot_table['Mes'].unique(), key="sel_m_op")
                 m_detail = pivot_table[pivot_table['Mes'] == sel_m][['Fecha', 'Total Remitos', 'Pendientes Prep', 'Pendientes Envío']]
-                st.dataframe(m_detail.style.applymap(lambda v: 'background-color: #ffcad4; color: black;' if v > 0 else '', subset=['Pendientes Prep', 'Pendientes Envío']), use_container_width=True, hide_index=True)
+                
+                # Robust styling compatible with new Pandas versions
+                def style_pending(v):
+                    return 'background-color: #ffcad4; color: black;' if v > 0 else ''
+                
+                try:
+                    styled_df = m_detail.style.map(style_pending, subset=['Pendientes Prep', 'Pendientes Envío'])
+                except:
+                    # Fallback for older pandas versions
+                    styled_df = m_detail.style.applymap(style_pending, subset=['Pendientes Prep', 'Pendientes Envío'])
+                
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
         st.markdown("---")
         st.subheader("⏱️ Tiempos de Despacho (Promedio Mensual)")
         if cmap['NP_ALTA'] and 'Dias NP/LR' in df.columns:
