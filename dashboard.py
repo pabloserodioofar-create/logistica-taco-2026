@@ -135,10 +135,18 @@ def load_and_process_data():
 
     # Date Conversion for DISPLAY
     cmap = {}
-    for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE']:
+    # NP/Factura/Despacho columns are M/D/YY (American)
+    for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO']:
         col_name = MAP_COLS[key]
         new_col = key + '_DT'
-        df[new_col] = pd.to_datetime(df[col_name], errors='coerce')
+        df[new_col] = pd.to_datetime(df[col_name], dayfirst=False, errors='coerce')
+        cmap[key] = new_col
+    
+    # CDS columns are DD/MM/YYYY (European)
+    for key in ['CDS_RECIBE', 'CDS_ENTREGA']:
+        col_name = MAP_COLS[key]
+        new_col = key + '_DT'
+        df[new_col] = pd.to_datetime(df[col_name], dayfirst=True, errors='coerce')
         cmap[key] = new_col
 
     # Consistency names
@@ -146,6 +154,7 @@ def load_and_process_data():
     df['Dias NP/LR'] = pd.to_numeric(df[MAP_COLS['DIAS_NP_LR']], errors='coerce')
     df['dias de entrega'] = pd.to_numeric(df[MAP_COLS['DIAS_CDS']], errors='coerce')
     df['Pendientes'] = pd.to_numeric(df[MAP_COLS['PENDIENTES_CDS']], errors='coerce')
+    df['Tiempos Logistica'] = pd.to_numeric(df[MAP_COLS['TIEMPO_LOG']], errors='coerce')
     df['CDS recibe'] = df[MAP_COLS['CDS_RECIBE']]
     df['CDS entrega'] = df[MAP_COLS['CDS_ENTREGA']]
     df['Remito Date'] = df[MAP_COLS['FACTURA']]
@@ -265,47 +274,69 @@ def main():
         st.markdown("---")
         st.subheader("⏱️ Promedios Mensuales (2026)")
         if pd.notnull(df[cmap['NP_ALTA']]).any():
-            # Filter only 2026 data
             df_2026 = df[df[cmap['NP_ALTA']].dt.year == 2026].copy()
             df_t = df_2026.dropna(subset=['Dias NP/LR', cmap['NP_ALTA']]).copy()
             
             if not df_t.empty:
-                # Global Metric
                 avg_2026 = df_t['Dias NP/LR'].mean()
-                st.metric("Promedio General 2026", f"{avg_2026:.2f} días")
-                
-                # Monthly grouping
+                st.metric("Promedio General 2026 (Días NP a LR)", f"{avg_2026:.2f} días")
                 df_t['Mes'] = df_t[cmap['NP_ALTA']].dt.strftime('%Y-%m')
                 prom_m = df_t.groupby('Mes')['Dias NP/LR'].mean().reset_index()
-                
                 tc1, tc2 = st.columns([1, 2])
-                with tc1: 
-                    st.dataframe(prom_m.sort_values('Mes', ascending=False), hide_index=True, use_container_width=True)
-                with tc2: 
-                    st.altair_chart(create_static_bar_chart(prom_m, 'Mes', 'Dias NP/LR'), use_container_width=True)
+                with tc1: st.dataframe(prom_m.sort_values('Mes', ascending=False), hide_index=True, use_container_width=True)
+                with tc2: st.altair_chart(create_static_bar_chart(prom_m, 'Mes', 'Dias NP/LR'), use_container_width=True)
             else:
-                st.info("No hay suficientes datos para calcular promedios en 2026.")
+                st.info("No hay datos para promedios de despacho 2026.")
+
+        st.markdown("---")
+        st.subheader("📦 Tiempos de Logística (Columna AO - Promedios)")
+        # Base on FACTURA date for Logistics time activity
+        if pd.notnull(df[cmap['FACTURA']]).any():
+            df_log = df[df[cmap['FACTURA']].dt.year == 2026].dropna(subset=['Tiempos Logistica', cmap['FACTURA']]).copy()
+            if not df_log.empty:
+                avg_log_2026 = df_log['Tiempos Logistica'].mean()
+                st.metric("Promedio Anual Logística 2026", f"{avg_log_2026:.2f} días")
+                df_log['Mes'] = df_log[cmap['FACTURA']].dt.strftime('%Y-%m')
+                prom_log = df_log.groupby('Mes')['Tiempos Logistica'].mean().reset_index()
+                lc1, lc2 = st.columns([1, 2])
+                with lc1: st.dataframe(prom_log.sort_values('Mes', ascending=False), hide_index=True, use_container_width=True)
+                with lc2: st.altair_chart(create_static_bar_chart(prom_log, 'Mes', 'Tiempos Logistica'), use_container_width=True)
+            else:
+                st.info("No hay datos para tiempos de logística 2026.")
 
     # --- TAB 3: CDS ---
     with tab3:
-        st.subheader("🎯 Rendimiento CDS")
+        st.subheader("🎯 Rendimiento CDS (2026)")
         if pd.notnull(df[cmap['CDS_RECIBE']]).any():
             df_c = df.dropna(subset=['dias de entrega', cmap['CDS_RECIBE']]).copy()
-            df_c['Mes'] = df_c[cmap['CDS_RECIBE']].dt.strftime('%Y-%m')
-            prom_c = df_c.groupby('Mes')['dias de entrega'].mean().reset_index()
-            cc1, cc2 = st.columns([1, 2])
-            with cc1: st.dataframe(prom_c.sort_values('Mes', ascending=False), hide_index=True)
-            with cc2: st.altair_chart(create_static_bar_chart(prom_c, 'Mes', 'dias de entrega'), use_container_width=True)
+            df_c = df_c[df_c[cmap['CDS_RECIBE']].dt.year == 2026]
+            
+            if not df_c.empty:
+                avg_cds_2026 = df_c['dias de entrega'].mean()
+                st.metric("Promedio General CDS 2026", f"{avg_cds_2026:.2f} días")
+                
+                df_c['Mes'] = df_c[cmap['CDS_RECIBE']].dt.strftime('%Y-%m')
+                prom_c = df_c.groupby('Mes')['dias de entrega'].mean().reset_index()
+                cc1, cc2 = st.columns([1, 2])
+                with cc1: st.dataframe(prom_c.sort_values('Mes', ascending=False), hide_index=True, use_container_width=True)
+                with cc2: st.altair_chart(create_static_bar_chart(prom_c, 'Mes', 'dias de entrega'), use_container_width=True)
+            else:
+                st.info("No hay datos CDS para 2026.")
 
         st.markdown("---")
         st.subheader("📋 Pendientes CDS (> 10 días)")
         p_cds = df[(df['AMBA/INTERIOR'] == 'CDS') & (df['Pendientes'] > 10)]
-        if not p_cds.empty: st.dataframe(p_cds[['Nro de Pedido', 'Cliente', 'Pendientes']].sort_values('Pendientes', ascending=False), use_container_width=True)
-        else: st.info("No hay pendientes críticos.")
+        if not p_cds.empty: 
+            st.dataframe(p_cds[['Nro de Pedido', 'Cliente', 'Pendientes']].sort_values('Pendientes', ascending=False), use_container_width=True, hide_index=True)
+        else: 
+            st.info("No hay pendientes críticos.")
         
         st.subheader("🚫 Anulados")
+        # Filter for annulled orders in CDS column
         anul = df[df['CDS entrega'].astype(str).str.lower().str.contains('anulado', na=False)]
-        if not anul.empty: st.dataframe(anul[['Nro de Pedido', 'Cliente', 'Remito', 'AMBA/INTERIOR']], use_container_width=True)
-        else: st.info("No hay anulados.")
+        if not anul.empty: 
+            st.dataframe(anul[['Nro de Pedido', 'Cliente', 'Remito', 'AMBA/INTERIOR']], use_container_width=True, hide_index=True)
+        else: 
+            st.info("No hay anulados.")
 
 if __name__ == "__main__": main()
