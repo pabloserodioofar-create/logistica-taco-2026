@@ -111,18 +111,26 @@ def load_data():
     cols_map = {
         'NP_ALTA': find_col(['NP Alta', 'Fecha y hora']),
         'NP_APROB': find_col(['NP de aprob', 'final', 'Fecha y hora']),
-        'COMPROBANTE': 'Comprobante Fecha y Hora',
-        'LR_FECHA': 'LR Fecha y Hora ',
-        'CDS_RECIBE': 'CDS recibe'
+        'COMPROBANTE': find_col(['Comprobante', 'Fecha y Hora']),
+        'LR_FECHA': find_col(['LR Fecha y Hora']),
+        'CDS_RECIBE': find_col(['CDS recibe']),
+        'CDS_ENTREGA': find_col(['CDS entrega']),
+        'AMBA_INT': find_col(['AMBA', 'INTERIOR']),
+        'ESTADO': find_col(['estado de pedido'])
     }
 
-    for col in cols_map.values():
+    # Date columns conversion
+    for key in ['NP_ALTA', 'NP_APROB', 'COMPROBANTE', 'LR_FECHA', 'CDS_RECIBE']:
+        col = cols_map[key]
         if col and col in df.columns:
             df[col] = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
     
+    # Numeric columns
     numeric_cols = ['dias de entrega', 'Pendientes', 'Dias NP/LR', 'Tiempos Logistica']
     for col in numeric_cols:
-        if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
+        target = find_col([col]) if col not in df.columns else col
+        if target and target in df.columns:
+            df[target] = pd.to_numeric(df[target], errors='coerce')
     return df, cols_map
 
 def main():
@@ -167,23 +175,23 @@ def main():
             
             if not filtered_df.empty:
                 for _, row in filtered_df.iterrows():
-                    is_cds = 'CDS' in str(row['AMBA/INTERIOR']).upper()
+                    is_cds = 'CDS' in str(row[cmap['AMBA_INT']]).upper()
                     f_np = row[cmap['NP_ALTA']].strftime('%d/%m/%Y') if cmap['NP_ALTA'] and pd.notnull(row[cmap['NP_ALTA']]) else 'S/D'
                     f_ap = row[cmap['NP_APROB']].strftime('%d/%m/%Y') if cmap['NP_APROB'] and pd.notnull(row[cmap['NP_APROB']]) else 'S/D'
-                    f_fc = row['Comprobante Fecha y Hora'].strftime('%d/%m/%Y') if pd.notnull(row['Comprobante Fecha y Hora']) else 'S/D'
-                    f_dp = row['LR Fecha y Hora '].strftime('%d/%m/%Y') if pd.notnull(row['LR Fecha y Hora ']) else 'S/D'
+                    f_fc = row[cmap['COMPROBANTE']].strftime('%d/%m/%Y') if cmap['COMPROBANTE'] and pd.notnull(row[cmap['COMPROBANTE']]) else 'S/D'
+                    f_dp = row[cmap['LR_FECHA']].strftime('%d/%m/%Y') if cmap['LR_FECHA'] and pd.notnull(row[cmap['LR_FECHA']]) else 'S/D'
                     
                     html_content = f'<div class="search-card">'
                     html_content += f'<div class="card-header"><h3>{row["Cliente"]}</h3></div>'
-                    html_content += f'<div class="card-subtitle">Pedido: <b>{row["Nro de Pedido"]}</b> | Remito: <b>{row["Remito"]}</b> | Zona: <b>{row["AMBA/INTERIOR"]}</b></div>'
+                    html_content += f'<div class="card-subtitle">Pedido: <b>{row["Nro de Pedido"]}</b> | Remito: <b>{row["Remito"]}</b> | Zona: <b>{row[cmap["AMBA_INT"]]}</b></div>'
                     html_content += f'<div class="timeline-container">'
                     html_content += f'<div class="timeline-item">📅 <b>Alta Nota de Pedido:</b> {f_np}</div>'
                     html_content += f'<div class="timeline-item">✅ <b>Aprobación Cuentas:</b> {f_ap}</div>'
                     html_content += f'<div class="timeline-item">📑 <b>Facturación y Remito:</b> {f_fc}</div>'
                     html_content += f'<div class="timeline-item">🚚 <b>Despacho (Logística):</b> {f_dp}</div>'
                     if is_cds:
-                        f_ak = row['CDS recibe'].strftime('%d/%m/%Y') if pd.notnull(row['CDS recibe']) else 'S/D'
-                        f_al = str(row['CDS entrega'])
+                        f_ak = row[cmap['CDS_RECIBE']].strftime('%d/%m/%Y') if cmap['CDS_RECIBE'] and pd.notnull(row[cmap['CDS_RECIBE']]) else 'S/D'
+                        f_al = str(row[cmap['CDS_ENTREGA']])
                         html_content += f'<div class="timeline-item">📍 <b>Ingreso CDS:</b> {f_ak}</div>'
                         html_content += f'<div class="timeline-item">🏁 <b>Entrega Final CDS:</b> {f_al}</div>'
                         html_content += f'</div><div class="summary-box">'
@@ -205,8 +213,8 @@ def main():
         if selected_client:
             c_df = df[df['Cliente'] == selected_client]
             avg_ah = c_df['Dias NP/LR'].mean()
-            is_any_cds = c_df['AMBA/INTERIOR'].astype(str).str.contains('CDS', na=False).any()
-            cds_c_df = c_df[c_df['AMBA/INTERIOR'].astype(str).str.contains('CDS', na=False)]
+            is_any_cds = c_df[cmap['AMBA_INT']].astype(str).str.contains('CDS', na=False).any()
+            cds_c_df = c_df[c_df[cmap['AMBA_INT']].astype(str).str.contains('CDS', na=False)]
             avg_am = cds_c_df['dias de entrega'].mean() if not cds_c_df.empty else np.nan
             val_ah = f"{avg_ah:.2f}" if pd.notnull(avg_ah) else "S/D"
             val_am = "No aplica" if not is_any_cds else (f"{avg_am:.2f}" if pd.notnull(avg_am) else "S/D")
@@ -219,13 +227,13 @@ def main():
                     st.metric("Tiempo Total Promedio", f"{total_val:.2f}")
                 else: st.metric("Tiempo Total Promedio", "S/D")
             st.markdown(f"**Listado de pedidos para {selected_client} (Muestra: {len(c_df)} pedidos)**")
-            st.dataframe(c_df[['Nro de Pedido', 'Remito', 'AMBA/INTERIOR', 'Dias NP/LR', 'dias de entrega']].sort_values('Nro de Pedido', ascending=False), use_container_width=True, hide_index=True)
+            st.dataframe(c_df[['Nro de Pedido', 'Remito', cmap['AMBA_INT'], 'Dias NP/LR', 'dias de entrega']].sort_values('Nro de Pedido', ascending=False), use_container_width=True, hide_index=True)
 
     # --- TAB 2: TIEMPOS OPERATIVOS ---
     with tab2:
         st.subheader("📊 Pendientes de Armado y Despacho")
         s_col1, s_col2, s_col3 = st.columns([1, 1, 1])
-        status_lower = df['estado de pedido'].astype(str).str.strip().str.lower()
+        status_lower = df[cmap['ESTADO']].astype(str).str.strip().str.lower()
         with s_col1:
             st.metric("Pendiente Armado", len(df[status_lower == "pendiente de armado"]))
             if st.button("Ver detalle Armado"): st.session_state.view_detail_op = "pendiente de armado"
@@ -235,16 +243,16 @@ def main():
         with s_col3:
             if st.button("🧹 Limpiar detalles"): st.session_state.view_detail_op = None
         if 'view_detail_op' in st.session_state and st.session_state.view_detail_op:
-            st.dataframe(df[status_lower == st.session_state.view_detail_op][['Nro de Pedido', 'Remito', 'Cliente', 'AMBA/INTERIOR', 'Dias NP/LR']], use_container_width=True, hide_index=True)
+            st.dataframe(df[status_lower == st.session_state.view_detail_op][['Nro de Pedido', 'Remito', 'Cliente', cmap['AMBA_INT'], 'Dias NP/LR']], use_container_width=True, hide_index=True)
         st.markdown("---")
         st.subheader("📅 Resumen de Actividad (Mensual / Diario)")
-        if 'Comprobante Fecha y Hora' in df.columns:
-            df_pivot = df.dropna(subset=['Comprobante Fecha y Hora']).copy()
-            df_pivot = df_pivot[(df_pivot['Comprobante Fecha y Hora'].dt.year == 2026) & (df_pivot['Comprobante Fecha y Hora'] <= TODAY)]
+        if cmap['COMPROBANTE'] in df.columns:
+            df_pivot = df.dropna(subset=[cmap['COMPROBANTE']]).copy()
+            df_pivot = df_pivot[(df_pivot[cmap['COMPROBANTE']].dt.year == 2026) & (df_pivot[cmap['COMPROBANTE']] <= TODAY)]
             if not df_pivot.empty:
-                df_pivot['Fecha'] = df_pivot['Comprobante Fecha y Hora'].dt.date
-                df_pivot['Mes'] = df_pivot['Comprobante Fecha y Hora'].dt.strftime('%b').str.lower()
-                st_l = df_pivot['estado de pedido'].astype(str).str.strip().str.lower()
+                df_pivot['Fecha'] = df_pivot[cmap['COMPROBANTE']].dt.date
+                df_pivot['Mes'] = df_pivot[cmap['COMPROBANTE']].dt.strftime('%b').str.lower()
+                st_l = df_pivot[cmap['ESTADO']].astype(str).str.strip().str.lower()
                 df_pivot['Total Remitos'] = 1
                 df_pivot['Pendientes Prep'] = (st_l == "pendiente de armado").astype(int)
                 df_pivot['Pendientes Envío'] = (st_l == "pendiente de despacho").astype(int)
@@ -254,17 +262,9 @@ def main():
                 pivot_table = pivot_table.sort_values(['MesIdx', 'Fecha'], ascending=[False, False])
                 sel_m = st.selectbox("Filtrar por Mes", pivot_table['Mes'].unique(), key="sel_m_op")
                 m_detail = pivot_table[pivot_table['Mes'] == sel_m][['Fecha', 'Total Remitos', 'Pendientes Prep', 'Pendientes Envío']]
-                
-                # Robust styling compatible with new Pandas versions
-                def style_pending(v):
-                    return 'background-color: #ffcad4; color: black;' if v > 0 else ''
-                
-                try:
-                    styled_df = m_detail.style.map(style_pending, subset=['Pendientes Prep', 'Pendientes Envío'])
-                except:
-                    # Fallback for older pandas versions
-                    styled_df = m_detail.style.applymap(style_pending, subset=['Pendientes Prep', 'Pendientes Envío'])
-                
+                def style_pending(v): return 'background-color: #ffcad4; color: black;' if v > 0 else ''
+                try: styled_df = m_detail.style.map(style_pending, subset=['Pendientes Prep', 'Pendientes Envío'])
+                except: styled_df = m_detail.style.applymap(style_pending, subset=['Pendientes Prep', 'Pendientes Envío'])
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         st.markdown("---")
@@ -282,10 +282,10 @@ def main():
                 with t_c2: st.altair_chart(create_static_bar_chart(p_mens, 'Mes', 'Promedio Días'), use_container_width=True)
         st.markdown("---")
         st.subheader("🚛 Tiempo Mensual Logístico")
-        if 'Tiempos Logistica' in df.columns and 'Comprobante Fecha y Hora' in df.columns:
-            df_log = df.dropna(subset=['Tiempos Logistica', 'Comprobante Fecha y Hora']).copy()
-            df_log = df_log[df_log['Comprobante Fecha y Hora'].dt.year == 2026]
-            df_log['Mes'] = df_log['Comprobante Fecha y Hora'].dt.strftime('%Y-%m')
+        if 'Tiempos Logistica' in df.columns and cmap['COMPROBANTE'] in df.columns:
+            df_log = df.dropna(subset=['Tiempos Logistica', cmap['COMPROBANTE']]).copy()
+            df_log = df_log[df_log[cmap['COMPROBANTE']].dt.year == 2026]
+            df_log['Mes'] = df_log[cmap['COMPROBANTE']].dt.strftime('%Y-%m')
             st.metric("Promedio General Logístico 2026 (Días)", f"{df_log['Tiempos Logistica'].mean():.2f}")
             log_avg = df_log.groupby('Mes')['Tiempos Logistica'].mean().reset_index()
             log_avg.columns = ['Mes', 'Promedio Logístico']
@@ -296,11 +296,11 @@ def main():
     # --- TAB 3: CDS ---
     with tab3:
         st.subheader("🎯 Tiempos CDS (Promedio Mensual)")
-        if 'CDS recibe' in df.columns and 'dias de entrega' in df.columns:
-            df_cds = df.dropna(subset=['CDS recibe', 'dias de entrega']).copy()
-            df_cds = df_cds[(df_cds['CDS recibe'].dt.year == 2026) & (df_cds['CDS recibe'] <= TODAY)]
+        if cmap['CDS_RECIBE'] and 'dias de entrega' in df.columns:
+            df_cds = df.dropna(subset=[cmap['CDS_RECIBE'], 'dias de entrega']).copy()
+            df_cds = df_cds[(df_cds[cmap['CDS_RECIBE']].dt.year == 2026) & (df_cds[cmap['CDS_RECIBE']] <= TODAY)]
             if not df_cds.empty:
-                df_cds['Mes CDS'] = df_cds['CDS recibe'].dt.strftime('%Y-%m')
+                df_cds['Mes CDS'] = df_cds[cmap['CDS_RECIBE']].dt.strftime('%Y-%m')
                 p_cds = df_cds.groupby('Mes CDS')['dias de entrega'].mean().reset_index()
                 p_cds.columns = ['Mes', 'Promedio Días CDS']
                 c_c1, c_c2 = st.columns([1, 2])
@@ -308,14 +308,30 @@ def main():
                 with c_c2: st.altair_chart(create_static_bar_chart(p_cds, 'Mes', 'Promedio Días CDS'), use_container_width=True)
         st.markdown("---")
         st.subheader("📋 Listado de Pendientes CDS (> 10 días)")
-        cds_m = (df['AMBA/INTERIOR'].astype(str).str.contains('CDS', na=False)) & (df['CDS entrega'].astype(str).str.strip().str.lower().str.contains('pendiente', na=False))
+        
+        # Super flexible filtering for CDS Pendientes
+        cds_m = (df[cmap['AMBA_INT']].astype(str).str.contains('CDS', case=False, na=False)) & \
+                (df[cmap['CDS_ENTREGA']].astype(str).str.strip().str.lower().str.contains('pendiente', na=False))
         cds_p = df[cds_m].copy()
+        
         if not cds_p.empty:
             cds_p = cds_p[cds_p['Pendientes'] > 10]
-            if not cds_p.empty: st.dataframe(cds_p[['Nro de Pedido', 'Cliente', 'Remito', 'NIC real', 'Pendientes']].sort_values('Pendientes', ascending=False), use_container_width=True, hide_index=True)
+            if not cds_p.empty:
+                st.dataframe(cds_p[['Nro de Pedido', 'Cliente', 'Remito', 'NIC real', 'Pendientes']].sort_values('Pendientes', ascending=False), use_container_width=True, hide_index=True)
+            else:
+                st.info("✅ No hay pedidos CDS pendientes con más de 10 días.")
+        else:
+            st.info("✅ No hay pedidos marcados como 'Pendiente' en CDS.")
+
         st.markdown("---")
         st.subheader("🚫 Anulados")
-        anul_df = df[df['CDS entrega'].astype(str).str.strip().str.lower() == "anulado"]
-        if not anul_df.empty: st.dataframe(anul_df[['Nro de Pedido', 'Cliente', 'Remito', 'NIC real', 'AMBA/INTERIOR']], use_container_width=True, hide_index=True)
+        # Super flexible filtering for Anulados
+        anul_m = df[cmap['CDS_ENTREGA']].astype(str).str.strip().str.lower().str.contains('anulado', na=False)
+        anul_df = df[anul_m].copy()
+        
+        if not anul_df.empty:
+            st.dataframe(anul_df[['Nro de Pedido', 'Cliente', 'Remito', 'NIC real', cmap['AMBA_INT']]], use_container_width=True, hide_index=True)
+        else:
+            st.info("✅ No hay pedidos marcados como 'Anulado'.")
 
 if __name__ == "__main__": main()
