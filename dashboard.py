@@ -219,15 +219,32 @@ def main():
         sc2.metric("Pendiente Despacho", len(df[df['estado de pedido'] == "Pendiente de despacho"]))
         
         st.markdown("---")
-        st.subheader("📅 Actividad Diaria")
-        if pd.notnull(df[cmap['FACTURA']]).any():
-            piv = df.dropna(subset=[cmap['FACTURA']]).copy()
-            piv = piv[piv[cmap['FACTURA']].dt.year == 2026]
-            piv['Fecha'] = piv[cmap['FACTURA']].dt.date
-            piv['Mes'] = piv[cmap['FACTURA']].dt.strftime('%b').str.lower()
-            res_piv = piv.groupby(['Mes', 'Fecha']).agg({'Nro de Pedido': 'count'}).reset_index()
-            res_piv.columns = ['Mes', 'Fecha', 'Total']
-            st.dataframe(res_piv.sort_values('Fecha', ascending=False), use_container_width=True)
+        st.subheader("📅 Actividad Diaria (2026)")
+        # Base activity on NP_ALTA to include all orders (even those not yet invoiced)
+        if pd.notnull(df[cmap['NP_ALTA']]).any():
+            act_df = df.dropna(subset=[cmap['NP_ALTA']]).copy()
+            act_df = act_df[act_df[cmap['NP_ALTA']].dt.year == 2026]
+            
+            # Month grouping
+            act_df['Mes'] = act_df[cmap['NP_ALTA']].dt.strftime('%Y-%m')
+            act_df['Fecha'] = act_df[cmap['NP_ALTA']].dt.strftime('%d/%m/%Y')
+            
+            months = sorted(act_df['Mes'].unique(), reverse=True)
+            sel_month = st.selectbox("Seleccione el Mes", months)
+            
+            m_data = act_df[act_df['Mes'] == sel_month].sort_values(cmap['NP_ALTA'], ascending=False)
+            
+            def color_pending(s):
+                return ['background-color: #ffb3ba; color: black' if v in ['Pendiente de armado', 'Pendiente de despacho'] else '' for v in s]
+
+            # Detailed table with styling
+            st.dataframe(
+                m_data[['Fecha', 'Nro de Pedido', 'Cliente', 'estado de pedido', 'Dias NP/LR']].style.apply(color_pending, subset=['estado de pedido'], axis=0),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("No hay datos de actividad para 2026.")
 
         st.markdown("---")
         st.subheader("⏱️ Promedios Mensuales")
