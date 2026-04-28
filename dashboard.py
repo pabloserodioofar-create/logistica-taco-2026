@@ -209,21 +209,38 @@ def main():
                 f_fc = r[cmap['FACTURA']].strftime('%d/%m/%Y') if pd.notnull(r[cmap['FACTURA']]) else 'S/D'
                 f_dp = r[cmap['DESPACHO']].strftime('%d/%m/%Y') if pd.notnull(r[cmap['DESPACHO']]) else 'S/D'
                 
-                st.markdown(f"""
-                <div class="search-card">
-                    <div class="card-header"><h3>{r['Cliente']}</h3></div>
-                    <div class="card-subtitle">Pedido: <b>{r['Nro de Pedido']}</b> | Remito: <b>{r['Remito']}</b> | Zona: <b>{r['AMBA/INTERIOR']}</b></div>
-                    <div class="timeline-container">
-                        <div class="timeline-item">📅 <b>Alta Nota de Pedido:</b> {f_np}</div>
-                        <div class="timeline-item">✅ <b>Aprobación Cuentas:</b> {f_ap}</div>
-                        <div class="timeline-item">📑 <b>Facturación y Remito:</b> {f_fc}</div>
-                        <div class="timeline-item">🚚 <b>Despacho (Logística):</b> {f_dp}</div>
-                        {"<div class='timeline-item'>📍 <b>Ingreso CDS:</b> " + r[cmap['CDS_RECIBE']].strftime('%d/%m/%Y') + "</div>" if pd.notnull(r[cmap['CDS_RECIBE']]) else ""}
-                        {"<div class='timeline-item'>🏁 <b>Entrega Final CDS:</b> " + str(r['CDS entrega']) + "</div>" if r['AMBA/INTERIOR'] == 'CDS' else ""}
-                    </div>
-                    <div class="summary-box">⏱️ Despacho: <b>{r['Dias NP/LR']} días</b> | NIC: <b>{r['NIC_CLEAN']}</b></div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"""<div class="search-card">
+<div class="card-header"><h3>{r['Cliente']}</h3></div>
+<div class="card-subtitle">Pedido: <b>{r['Nro de Pedido']}</b> | Remito: <b>{r['Remito']}</b> | Zona: <b>{r['AMBA/INTERIOR']}</b></div>
+<div class="timeline-container">
+<div class="timeline-item">📅 <b>Alta Nota de Pedido:</b> {f_np}</div>
+<div class="timeline-item">✅ <b>Aprobación Cuentas:</b> {f_ap}</div>
+<div class="timeline-item">📑 <b>Facturación y Remito:</b> {f_fc}</div>
+<div class="timeline-item">🚚 <b>Despacho (Logística):</b> {f_dp}</div>
+{"<div class='timeline-item'>📍 <b>Ingreso CDS:</b> " + r[cmap['CDS_RECIBE']].strftime('%d/%m/%Y') + "</div>" if pd.notnull(r[cmap['CDS_RECIBE']]) else ""}
+{"<div class='timeline-item'>🏁 <b>Entrega Final CDS:</b> " + str(r['CDS entrega']) + "</div>" if r['AMBA/INTERIOR'] == 'CDS' else ""}
+</div>
+<div class="summary-box">⏱️ Despacho: <b>{r['Dias NP/LR']} días</b> | NIC: <b>{str(r['NIC_CLEAN']) if pd.notnull(r['NIC_CLEAN']) else 'S/D'}</b></div>
+</div>""", unsafe_allow_html=True)
+
+        st.markdown("---")
+        st.subheader("👥 Buscador por Cliente (Promedios)")
+        clist = sorted(df['Cliente'].dropna().unique())
+        sel_c = st.selectbox("Seleccione un Cliente para ver su historial", [""] + clist)
+        if sel_c:
+            cdf = df[df['Cliente'] == sel_c].copy()
+            c1, c2, c3 = st.columns(3)
+            with c1: st.metric("Promedio NP a LR", f"{cdf['Dias NP/LR'].mean():.2f}" if pd.notnull(cdf['Dias NP/LR'].mean()) else "S/D")
+            with c2: 
+                cds_cdf = cdf[cdf['AMBA/INTERIOR'] == 'CDS']
+                st.metric("Promedio CDS", f"{cds_cdf['dias de entrega'].mean():.2f}" if not cds_cdf.empty and pd.notnull(cds_cdf['dias de entrega'].mean()) else "N/A")
+            with c3: st.metric("Total Pedidos", len(cdf))
+            
+            st.dataframe(
+                cdf[['Nro de Pedido', 'Remito', 'AMBA/INTERIOR', 'estado de pedido', 'Dias NP/LR', 'dias de entrega']].sort_values('Nro de Pedido', ascending=False), 
+                use_container_width=True, 
+                hide_index=True
+            )
 
     # --- TAB 2: TIEMPOS OPERATIVOS ---
     with tab2:
