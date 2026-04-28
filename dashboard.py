@@ -122,9 +122,17 @@ def load_and_process_data():
         'TIEMPO_LOG': find_col(40, 'Tiempos Logistica')
     }
 
-    # Status Logic (as requested)
-    # Pendiente Armado: Column Q (Bultos) is null or 0
-    # Pendiente Despacho: Column AB (LR) is null but has Bultos > 0
+    # Filter out empty rows (clean "trash" data from dragged formulas)
+    df = df.dropna(subset=[df.columns[0]]) # Nro de Pedido must not be null
+    
+    # NIC Cleaning (Standardized)
+    def clean_nic_func(val):
+        val = str(val).replace(" ", "").strip()
+        if val.isdigit() and len(val) > 9: return val[3:-4]
+        return val
+    df['NIC_CLEAN'] = df.iloc[:, 2].apply(clean_nic_func)
+
+    # Status Logic
     def get_custom_status(row):
         bultos = pd.to_numeric(row[MAP_COLS['BULTOS']], errors='coerce')
         if pd.notnull(row[MAP_COLS['DESPACHO']]): return "Despachado"
@@ -136,14 +144,12 @@ def load_and_process_data():
 
     # Date Conversion for DISPLAY
     cmap = {}
-    # NP/Factura/Despacho columns are M/D/YY (American)
     for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO']:
         col_name = MAP_COLS[key]
         new_col = key + '_DT'
         df[new_col] = pd.to_datetime(df[col_name], dayfirst=False, errors='coerce')
         cmap[key] = new_col
     
-    # CDS columns are DD/MM/YYYY (European)
     for key in ['CDS_RECIBE', 'CDS_ENTREGA']:
         col_name = MAP_COLS[key]
         new_col = key + '_DT'
@@ -154,7 +160,7 @@ def load_and_process_data():
     df['AMBA/INTERIOR'] = df[MAP_COLS['ZONA']]
     df['Dias NP/LR'] = pd.to_numeric(df[MAP_COLS['DIAS_NP_LR']], errors='coerce')
     df['dias de entrega'] = pd.to_numeric(df[MAP_COLS['DIAS_CDS']], errors='coerce')
-    df['Pendientes'] = pd.to_numeric(df[MAP_COLS['PENDIENTES_CDS']], errors='coerce')
+    df['Pendientes_Sheet'] = pd.to_numeric(df[MAP_COLS['PENDIENTES_CDS']], errors='coerce')
     df['Tiempos Logistica'] = pd.to_numeric(df[MAP_COLS['TIEMPO_LOG']], errors='coerce')
     df['CDS recibe'] = df[MAP_COLS['CDS_RECIBE']]
     df['CDS entrega'] = df[MAP_COLS['CDS_ENTREGA']]
@@ -342,19 +348,26 @@ def main():
                 st.info("No hay datos CDS para 2026.")
 
         st.markdown("---")
-        st.subheader("📋 Pendientes CDS (> 10 días)")
-        p_cds = df[(df['AMBA/INTERIOR'] == 'CDS') & (df['Pendientes'] > 10)]
-        if not p_cds.empty: 
-            st.dataframe(p_cds[['Nro de Pedido', 'Cliente', 'Pendientes']].sort_values('Pendientes', ascending=False), use_container_width=True, hide_index=True)
-        else: 
-            st.info("No hay pendientes críticos.")
+        st.subheader("📋 Pendientes CDS (Columna AN)")
+        # Filter for rows where Column AL contains 'Pendiente'
+        p_cds = df[df['CDS entrega'].astype(str).str.lower().str.contains('pendiente', na=False)].copy()
         
-        st.subheader("🚫 Anulados")
-        # Filter for annulled orders in CDS column
+        if not p_cds.empty:
+            # Use the days already calculated in the spreadsheet (Column AN / Pendientes_Sheet)
+            st.dataframe(
+                p_cds[['Nro de Pedido', 'Cliente', 'CDS recibe', 'Pendientes_Sheet']].sort_values('Pendientes_Sheet', ascending=False), 
+                use_container_width=True, 
+                hide_index=True
+            )
+        else: 
+            st.info("No hay pedidos marcados como 'Pendiente' en CDS.")
+        
+        st.subheader("🚫 Anulados CDS")
+        # Filter for rows where Column AL contains 'Anulado'
         anul = df[df['CDS entrega'].astype(str).str.lower().str.contains('anulado', na=False)]
         if not anul.empty: 
-            st.dataframe(anul[['Nro de Pedido', 'Cliente', 'Remito', 'AMBA/INTERIOR']], use_container_width=True, hide_index=True)
+            st.dataframe(anul[['Nro de Pedido', 'Cliente', 'Remito', 'CDS recibe', 'CDS entrega']], use_container_width=True, hide_index=True)
         else: 
-            st.info("No hay anulados.")
+            st.info("No hay pedidos marcados como 'Anulado' en CDS.")
 
 if __name__ == "__main__": main()
