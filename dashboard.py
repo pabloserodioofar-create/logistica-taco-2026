@@ -237,15 +237,24 @@ def main():
         sel_c = st.selectbox("Seleccione un Cliente para ver su historial", [""] + clist)
         if sel_c:
             cdf = df[df['Cliente'] == sel_c].copy()
-            c1, c2, c3 = st.columns(3)
+            
+            # Calculate total for each row for average calculation
+            cdf['Total_Order'] = cdf.apply(
+                lambda r: (r['Dias NP/LR'] + (r['dias de entrega'] if pd.notnull(r['dias de entrega']) else 0)) 
+                if r['AMBA/INTERIOR'] == 'CDS' else r['Dias NP/LR'], 
+                axis=1
+            )
+            
+            c1, c2, c3, c4 = st.columns(4)
             with c1: st.metric("Promedio NP a LR", f"{cdf['Dias NP/LR'].mean():.2f}" if pd.notnull(cdf['Dias NP/LR'].mean()) else "S/D")
             with c2: 
                 cds_cdf = cdf[cdf['AMBA/INTERIOR'] == 'CDS']
                 st.metric("Promedio CDS", f"{cds_cdf['dias de entrega'].mean():.2f}" if not cds_cdf.empty and pd.notnull(cds_cdf['dias de entrega'].mean()) else "N/A")
-            with c3: st.metric("Total Pedidos", len(cdf))
+            with c3: st.metric("Promedio Total", f"{cdf['Total_Order'].mean():.2f}" if pd.notnull(cdf['Total_Order'].mean()) else "S/D")
+            with c4: st.metric("Total Pedidos", len(cdf))
             
             st.dataframe(
-                cdf[['Nro de Pedido', 'Remito', 'AMBA/INTERIOR', 'estado de pedido', 'Dias NP/LR', 'dias de entrega']].sort_values('Nro de Pedido', ascending=False), 
+                cdf[['Nro de Pedido', 'Remito', 'AMBA/INTERIOR', 'estado de pedido', 'Dias NP/LR', 'dias de entrega', 'Total_Order']].sort_values('Nro de Pedido', ascending=False), 
                 use_container_width=True, 
                 hide_index=True
             )
