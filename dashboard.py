@@ -210,6 +210,13 @@ def main():
                 f_fc = r[cmap['FACTURA']].strftime('%d/%m/%Y') if pd.notnull(r[cmap['FACTURA']]) else 'S/D'
                 f_dp = r[cmap['DESPACHO']].strftime('%d/%m/%Y') if pd.notnull(r[cmap['DESPACHO']]) else 'S/D'
                 
+                # Extra metrics for CDS
+                cds_info = ""
+                if r['AMBA/INTERIOR'] == 'CDS':
+                    d_ent = r['dias de entrega'] if pd.notnull(r['dias de entrega']) else 0
+                    total = r['Dias NP/LR'] + d_ent
+                    cds_info = f" | CDS: <b>{d_ent} días</b> | Total: <b>{total} días</b>"
+                
                 st.markdown(f"""<div class="search-card">
 <div class="card-header"><h3>{r['Cliente']}</h3></div>
 <div class="card-subtitle">Pedido: <b>{r['Nro de Pedido']}</b> | Remito: <b>{r['Remito']}</b> | Zona: <b>{r['AMBA/INTERIOR']}</b></div>
@@ -221,7 +228,7 @@ def main():
 {"<div class='timeline-item'>📍 <b>Ingreso CDS:</b> " + r[cmap['CDS_RECIBE']].strftime('%d/%m/%Y') + "</div>" if pd.notnull(r[cmap['CDS_RECIBE']]) else ""}
 {"<div class='timeline-item'>🏁 <b>Entrega Final CDS:</b> " + str(r['CDS entrega']) + "</div>" if r['AMBA/INTERIOR'] == 'CDS' else ""}
 </div>
-<div class="summary-box">⏱️ Despacho: <b>{r['Dias NP/LR']} días</b> | NIC: <b>{str(r['NIC_CLEAN']) if pd.notnull(r['NIC_CLEAN']) else 'S/D'}</b></div>
+<div class="summary-box">⏱️ Despacho: <b>{r['Dias NP/LR']} días</b>{cds_info} | NIC: <b>{str(r['NIC_CLEAN']) if pd.notnull(r['NIC_CLEAN']) else 'S/D'}</b></div>
 </div>""", unsafe_allow_html=True)
 
         st.markdown("---")
