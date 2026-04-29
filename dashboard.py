@@ -145,13 +145,17 @@ def load_and_process_data():
     
     df['estado de pedido'] = df.apply(get_custom_status, axis=1)
 
-    # Date Conversion for DISPLAY
+    # Date Conversion for DISPLAY (Robust Method)
     cmap = {}
-    # All columns now seem to be DD/MM/YYYY (European/Argentine)
+    from datetime import datetime, timedelta
+    cutoff_date = datetime.now() + timedelta(days=30)
     for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE', 'CDS_ENTREGA', 'REMITO_FECHA', 'LR_CIERRE']:
         col_name = MAP_COLS[key]
         new_col = key + '_DT'
-        df[new_col] = pd.to_datetime(df[col_name], dayfirst=True, errors='coerce')
+        # Force string then parse with dayfirst=True
+        df[new_col] = pd.to_datetime(df[col_name].astype(str), dayfirst=True, errors='coerce')
+        # Clean future dates (noise from swapped months)
+        df.loc[df[new_col] > cutoff_date, new_col] = pd.NaT
         cmap[key] = new_col
 
     # Consistency names
