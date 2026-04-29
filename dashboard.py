@@ -358,8 +358,15 @@ def main():
         st.markdown("---")
         st.subheader("🚚 LR sin cerrar (Pendiente AD)")
         # Filter: Has Dispatch Date (AB) but NO Closure Date (AD)
-        lr_pend = df[pd.notnull(df[cmap['DESPACHO']]) & pd.isnull(df[cmap['LR_CIERRE']])]
+        lr_pend = df[pd.notnull(df[cmap['DESPACHO']]) & pd.isnull(df[cmap['LR_CIERRE']])].copy()
+        
         if not lr_pend.empty:
+            # Summary by Day
+            lr_summary = lr_pend.groupby('Fecha Despacho').size().reset_index(name='Cant. Envíos')
+            st.write("**Resumen por día:**")
+            st.dataframe(lr_summary.sort_values('Fecha Despacho', ascending=True), use_container_width=True, hide_index=True)
+            
+            st.write("**Detalle de envíos:**")
             st.dataframe(
                 lr_pend[['Fecha Despacho', 'Cliente', 'Remito']].sort_values('Fecha Despacho', ascending=True), 
                 use_container_width=True, hide_index=True
