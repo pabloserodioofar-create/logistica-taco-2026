@@ -112,6 +112,7 @@ def load_and_process_data():
         'FACTURA': find_col(14, 'Comprobante Fecha y Hora'), # O
         'BULTOS': find_col(16, 'Cantidad de Bultos'), # Q
         'DESPACHO': find_col(27, 'LR Fecha y Hora '), # AB
+        'LR_CIERRE': find_col(29, 'LR Fecha y Hora Cierre'), # AD
         'ZONA': find_col(31, 'AMBA/INTERIOR'),
         'REMITO_FECHA': find_col(24, 'Remito Fecha y Hora'), # Y
         'ESTADO_SHEET': find_col(32, 'estado de pedido'),
@@ -146,7 +147,7 @@ def load_and_process_data():
     # Date Conversion for DISPLAY
     cmap = {}
     # All columns now seem to be DD/MM/YYYY (European/Argentine)
-    for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE', 'CDS_ENTREGA', 'REMITO_FECHA']:
+    for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE', 'CDS_ENTREGA', 'REMITO_FECHA', 'LR_CIERRE']:
         col_name = MAP_COLS[key]
         new_col = key + '_DT'
         df[new_col] = pd.to_datetime(df[col_name], dayfirst=True, errors='coerce')
@@ -163,6 +164,7 @@ def load_and_process_data():
     df['Remito Date'] = df[MAP_COLS['FACTURA']]
     df['Bultos'] = df[MAP_COLS['BULTOS']]
     df['Fecha Remito'] = df[cmap['REMITO_FECHA']].dt.strftime('%d/%m/%Y')
+    df['Fecha Despacho'] = df[cmap['DESPACHO']].dt.strftime('%d/%m/%Y')
     
     return df, cmap
 
@@ -269,7 +271,7 @@ def main():
         
         c1, c2 = st.columns(2)
         with c1:
-            st.metric("Pendiente Armado (Sin Bultos)", len(p_armado))
+            st.metric("Pendiente Armado", len(p_armado))
             with st.expander("Ver detalle Armado"):
                 st.dataframe(
                     p_armado[['Fecha Remito', 'Cliente', 'Remito']].sort_values('Fecha Remito', ascending=True), 
@@ -277,7 +279,7 @@ def main():
                 )
         
         with c2:
-            st.metric("Pendiente Despacho (Sin LR)", len(p_despacho))
+            st.metric("Pendiente Despacho", len(p_despacho))
             with st.expander("Ver detalle Despacho"):
                 st.dataframe(
                     p_despacho[['Fecha Remito', 'Cliente', 'Remito']].sort_values('Fecha Remito', ascending=True), 
@@ -332,7 +334,7 @@ def main():
                 st.info("No hay datos para promedios de despacho 2026.")
 
         st.markdown("---")
-        st.subheader("📦 Tiempos de Logística (Columna AO - Promedios)")
+        st.subheader("📦 Tiempos de Logística")
         # Base on FACTURA date for Logistics time activity
         if pd.notnull(df[cmap['FACTURA']]).any():
             df_log = df[df[cmap['FACTURA']].dt.year == 2026].dropna(subset=['Tiempos Logistica', cmap['FACTURA']]).copy()
@@ -346,6 +348,18 @@ def main():
                 with lc2: st.altair_chart(create_static_bar_chart(prom_log, 'Mes', 'Tiempos Logistica'), use_container_width=True)
             else:
                 st.info("No hay datos para tiempos de logística 2026.")
+
+        st.markdown("---")
+        st.subheader("🚚 LR sin cerrar (Pendiente AD)")
+        # Filter: Has Dispatch Date (AB) but NO Closure Date (AD)
+        lr_pend = df[pd.notnull(df[cmap['DESPACHO']]) & pd.isnull(df[cmap['LR_CIERRE']])]
+        if not lr_pend.empty:
+            st.dataframe(
+                lr_pend[['Fecha Despacho', 'Cliente', 'Remito']].sort_values('Fecha Despacho', ascending=True), 
+                use_container_width=True, hide_index=True
+            )
+        else:
+            st.info("No hay LR pendientes de cierre.")
 
     # --- TAB 3: CDS ---
     with tab3:
