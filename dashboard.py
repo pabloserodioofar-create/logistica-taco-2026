@@ -121,7 +121,8 @@ def load_and_process_data():
         'CDS_ENTREGA': find_col(37, 'CDS entrega'),
         'DIAS_CDS': find_col(38, 'dias de entrega'),
         'PENDIENTES_CDS': find_col(39, 'Pendientes'),
-        'TIEMPO_LOG': find_col(40, 'Tiempos Logistica')
+        'TIEMPO_LOG': find_col(40, 'Tiempos Logistica'),
+        'LINK_CONFORME': find_col(41, 'Link Conforme') # AP
     }
 
     # Filter out empty rows (clean "trash" data from dragged formulas)
@@ -159,6 +160,7 @@ def load_and_process_data():
     df['dias de entrega'] = pd.to_numeric(df[MAP_COLS['DIAS_CDS']], errors='coerce')
     df['Pendientes_Sheet'] = pd.to_numeric(df[MAP_COLS['PENDIENTES_CDS']], errors='coerce')
     df['Tiempos Logistica'] = pd.to_numeric(df[MAP_COLS['TIEMPO_LOG']], errors='coerce')
+    df['Link Conforme'] = df[MAP_COLS['LINK_CONFORME']]
     df['CDS recibe'] = df[MAP_COLS['CDS_RECIBE']]
     df['CDS entrega'] = df[MAP_COLS['CDS_ENTREGA']]
     df['Remito Date'] = df[MAP_COLS['FACTURA']]
@@ -402,5 +404,22 @@ def main():
             st.dataframe(anul[['Nro de Pedido', 'Cliente', 'Remito', 'CDS recibe', 'CDS entrega']], use_container_width=True, hide_index=True)
         else: 
             st.info("No hay pedidos marcados como 'Anulado' en CDS.")
+
+        st.markdown("---")
+        st.subheader("📝 Conforme entrega CDS")
+        remito_search = st.text_input("Buscar Conforme por Remito", key="conforme_search")
+        if remito_search:
+            # Search in Remito column
+            match = df[df['Remito'].astype(str).str.contains(remito_search, case=False, na=False)]
+            if not match.empty:
+                for _, row in match.iterrows():
+                    link = row['Link Conforme']
+                    if pd.notnull(link) and str(link).strip() != "":
+                        st.success(f"Conforme encontrado para **{row['Cliente']}** (Remito: {row['Remito']})")
+                        st.markdown(f"🔗 [Haga clic aquí para ver el Conforme]({link})")
+                    else:
+                        st.warning(f"Se encontró el remito de **{row['Cliente']}**, pero no tiene link de conforme cargado.")
+            else:
+                st.error("No se encontró ningún remito que coincida con la búsqueda.")
 
 if __name__ == "__main__": main()
