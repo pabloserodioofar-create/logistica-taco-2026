@@ -144,13 +144,8 @@ def load_and_process_data():
 
     # Date Conversion for DISPLAY
     cmap = {}
-    for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO']:
-        col_name = MAP_COLS[key]
-        new_col = key + '_DT'
-        df[new_col] = pd.to_datetime(df[col_name], dayfirst=False, errors='coerce')
-        cmap[key] = new_col
-    
-    for key in ['CDS_RECIBE', 'CDS_ENTREGA']:
+    # All columns now seem to be DD/MM/YYYY (European/Argentine)
+    for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE', 'CDS_ENTREGA']:
         col_name = MAP_COLS[key]
         new_col = key + '_DT'
         df[new_col] = pd.to_datetime(df[col_name], dayfirst=True, errors='coerce')
