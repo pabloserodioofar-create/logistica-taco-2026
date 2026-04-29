@@ -113,6 +113,7 @@ def load_and_process_data():
         'BULTOS': find_col(16, 'Cantidad de Bultos'), # Q
         'DESPACHO': find_col(27, 'LR Fecha y Hora '), # AB
         'ZONA': find_col(31, 'AMBA/INTERIOR'),
+        'REMITO_FECHA': find_col(24, 'Remito Fecha y Hora'), # Y
         'ESTADO_SHEET': find_col(32, 'estado de pedido'),
         'DIAS_NP_LR': find_col(33, 'Dias NP/LR'),
         'CDS_RECIBE': find_col(36, 'CDS recibe'),
@@ -145,7 +146,7 @@ def load_and_process_data():
     # Date Conversion for DISPLAY
     cmap = {}
     # All columns now seem to be DD/MM/YYYY (European/Argentine)
-    for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE', 'CDS_ENTREGA']:
+    for key in ['NP_ALTA', 'NP_APROB', 'FACTURA', 'DESPACHO', 'CDS_RECIBE', 'CDS_ENTREGA', 'REMITO_FECHA']:
         col_name = MAP_COLS[key]
         new_col = key + '_DT'
         df[new_col] = pd.to_datetime(df[col_name], dayfirst=True, errors='coerce')
@@ -161,6 +162,7 @@ def load_and_process_data():
     df['CDS entrega'] = df[MAP_COLS['CDS_ENTREGA']]
     df['Remito Date'] = df[MAP_COLS['FACTURA']]
     df['Bultos'] = df[MAP_COLS['BULTOS']]
+    df['Fecha Remito'] = df[cmap['REMITO_FECHA']].dt.strftime('%d/%m/%Y')
     
     return df, cmap
 
@@ -269,12 +271,18 @@ def main():
         with c1:
             st.metric("Pendiente Armado (Sin Bultos)", len(p_armado))
             with st.expander("Ver detalle Armado"):
-                st.dataframe(p_armado[['Nro de Pedido', 'Cliente', 'Remito', 'Remito Date']], use_container_width=True, hide_index=True)
+                st.dataframe(
+                    p_armado[['Fecha Remito', 'Cliente', 'Remito']].sort_values('Fecha Remito', ascending=True), 
+                    use_container_width=True, hide_index=True
+                )
         
         with c2:
             st.metric("Pendiente Despacho (Sin LR)", len(p_despacho))
             with st.expander("Ver detalle Despacho"):
-                st.dataframe(p_despacho[['Nro de Pedido', 'Cliente', 'Remito', 'Bultos']], use_container_width=True, hide_index=True)
+                st.dataframe(
+                    p_despacho[['Fecha Remito', 'Cliente', 'Remito']].sort_values('Fecha Remito', ascending=True), 
+                    use_container_width=True, hide_index=True
+                )
         
         st.markdown("---")
         st.subheader("📅 Actividad Diaria (Remitido por día)")
