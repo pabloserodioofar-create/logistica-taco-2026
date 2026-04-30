@@ -175,19 +175,24 @@ def load_and_process_data():
     return df, cmap
 
 def login():
-    """Simple login form to protect the dashboard with improved aesthetics."""
+    """Simple login form to protect the dashboard with improved aesthetics and centering."""
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
     if not st.session_state["authenticated"]:
         st.markdown("""
             <style>
-            .login-wrapper {
+            /* Hide scrolling for login */
+            .main { overflow: hidden; }
+            section[data-testid="stSidebar"] { display: none; }
+            
+            .login-container {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                margin-top: 50px;
+                height: 80vh;
+                width: 100%;
             }
             .stTextInput {
                 max-width: 300px;
@@ -195,35 +200,38 @@ def login():
             }
             div.stButton > button:first-child {
                 max-width: 300px;
-                margin: 20px auto;
+                margin: 10px auto;
                 display: block;
+                background-color: #2e7d32;
+                color: white;
             }
             </style>
         """, unsafe_allow_html=True)
         
-        # Center logo
-        _, col_img, _ = st.columns([1, 2, 1])
-        with col_img:
+        with st.container():
+            st.markdown('<div class="login-container">', unsafe_allow_html=True)
+            
             logo_path = 'Logo Ofar.png'
             if os.path.exists(logo_path):
-                st.image(logo_path, use_container_width=True)
+                st.image(logo_path, width=250)
             else:
-                st.markdown("<h1 style='text-align: center;'>📦</h1>", unsafe_allow_html=True)
-        
-        st.markdown("<h2 style='text-align: center;'>Logística Taco 2026</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #888;'>Ingrese sus credenciales para continuar</p>", unsafe_allow_html=True)
+                st.markdown("<h1>📦</h1>", unsafe_allow_html=True)
+            
+            st.markdown("<h2 style='margin-top: 0;'>Logística Taco 2026</h2>", unsafe_allow_html=True)
+            st.markdown("<p style='color: #888; margin-bottom: 20px;'>Control de Acceso</p>", unsafe_allow_html=True)
 
-        # Center inputs using columns
-        _, col_input, _ = st.columns([1, 1, 1])
-        with col_input:
-            user = st.text_input("Usuario", key="login_user", placeholder="Nombre de usuario")
-            password = st.text_input("Contraseña", type="password", key="login_pass", placeholder="••••••••")
-            if st.button("Ingresar"):
-                if user == "admin" and password == "taco2026":
-                    st.session_state["authenticated"] = True
-                    st.rerun()
-                else:
-                    st.error("Credenciales incorrectas")
+            # Use columns just for the input width restriction
+            _, col_input, _ = st.columns([1, 2, 1])
+            with col_input:
+                user = st.text_input("Usuario", key="login_user", placeholder="Nombre de usuario")
+                password = st.text_input("Contraseña", type="password", key="login_pass", placeholder="••••••••")
+                if st.button("Ingresar"):
+                    if user == "admin" and password == "taco2026":
+                        st.session_state["authenticated"] = True
+                        st.rerun()
+                    else:
+                        st.error("Credenciales incorrectas")
+            st.markdown('</div>', unsafe_allow_html=True)
         return False
     return True
 
