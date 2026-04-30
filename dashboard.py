@@ -174,9 +174,60 @@ def load_and_process_data():
     
     return df, cmap
 
+def login():
+    """Simple login form to protect the dashboard."""
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if not st.session_state["authenticated"]:
+        st.markdown("""
+            <style>
+            .login-container {
+                max-width: 400px;
+                margin: 100px auto;
+                padding: 30px;
+                background-color: #1e1e1e;
+                border-radius: 15px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                text-align: center;
+            }
+            .stTextInput > div > div > input {
+                background-color: #2b2b2b !important;
+                color: white !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        with st.container():
+            st.markdown('<div class="login-container">', unsafe_allow_html=True)
+            # Use a generic lock icon or logo
+            st.markdown("🔒")
+            st.title("Ingreso Taco 2026")
+            user = st.text_input("Usuario", key="login_user")
+            password = st.text_input("Contraseña", type="password", key="login_pass")
+            if st.button("Ingresar", use_container_width=True):
+                if user == "admin" and password == "taco2026":
+                    st.session_state["authenticated"] = True
+                    st.rerun()
+                else:
+                    st.error("Credenciales incorrectas")
+            st.markdown('</div>', unsafe_allow_html=True)
+        return False
+    return True
+
 def main():
+    if not login():
+        st.stop()
+
     logo_path = 'Logo Ofar.png'
     last_upd = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    
+    st.sidebar.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_6u_T-rP3C_h1B1h0o_y0y0y0y0y0y0y0y0&s", width=100)
+    st.sidebar.title("Menú de Control")
+    
+    if st.sidebar.button("🚪 Cerrar Sesión"):
+        st.session_state["authenticated"] = False
+        st.rerun()
     
     col_logo, col_title = st.columns([1, 4])
     with col_logo:
