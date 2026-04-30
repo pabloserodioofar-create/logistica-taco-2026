@@ -15,15 +15,20 @@ HOJA2_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=cs
 
 # Page Configuration
 st.set_page_config(
-    page_title="Logistics Dashboard - Taco 2026",
-    page_icon="🚚",
+    page_title="Logística Taco 2026",
+    page_icon="📦",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # Custom CSS for Premium Design
 st.markdown("""
 <style>
+/* --- KILL TOP SPACE --- */
+header[data-testid="stHeader"] { display: none !important; visibility: hidden !important; }
+[data-testid="stAppViewContainer"] > section:nth-child(2) > div:nth-child(1) { padding-top: 0px !important; margin-top: 0px !important; }
+.block-container { padding-top: 0px !important; margin-top: 0px !important; }
+[data-testid="stVerticalBlock"] > div:first-child { margin-top: 0px !important; padding-top: 0px !important; }
 .main { background-color: #0d1117; }
 [data-testid="stMetricValue"] { color: #58a6ff !important; font-size: 1.8rem !important; }
 [data-testid="stMetricLabel"] { color: #c9d1d9 !important; font-weight: bold !important; }
