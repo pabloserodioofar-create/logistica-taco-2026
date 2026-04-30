@@ -175,43 +175,55 @@ def load_and_process_data():
     return df, cmap
 
 def login():
-    """Simple login form to protect the dashboard."""
+    """Simple login form to protect the dashboard with improved aesthetics."""
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
     if not st.session_state["authenticated"]:
         st.markdown("""
             <style>
-            .login-container {
-                max-width: 400px;
-                margin: 100px auto;
-                padding: 30px;
-                background-color: #1e1e1e;
-                border-radius: 15px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-                text-align: center;
+            .login-wrapper {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                margin-top: 50px;
             }
-            .stTextInput > div > div > input {
-                background-color: #2b2b2b !important;
-                color: white !important;
+            .stTextInput {
+                max-width: 300px;
+                margin: 0 auto;
+            }
+            div.stButton > button:first-child {
+                max-width: 300px;
+                margin: 20px auto;
+                display: block;
             }
             </style>
         """, unsafe_allow_html=True)
         
-        with st.container():
-            st.markdown('<div class="login-container">', unsafe_allow_html=True)
-            # Use a generic lock icon or logo
-            st.markdown("🔒")
-            st.title("Ingreso Taco 2026")
-            user = st.text_input("Usuario", key="login_user")
-            password = st.text_input("Contraseña", type="password", key="login_pass")
-            if st.button("Ingresar", use_container_width=True):
+        # Center logo
+        _, col_img, _ = st.columns([1, 2, 1])
+        with col_img:
+            logo_path = 'Logo Ofar.png'
+            if os.path.exists(logo_path):
+                st.image(logo_path, use_container_width=True)
+            else:
+                st.markdown("<h1 style='text-align: center;'>📦</h1>", unsafe_allow_html=True)
+        
+        st.markdown("<h2 style='text-align: center;'>Logística Taco 2026</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #888;'>Ingrese sus credenciales para continuar</p>", unsafe_allow_html=True)
+
+        # Center inputs using columns
+        _, col_input, _ = st.columns([1, 1, 1])
+        with col_input:
+            user = st.text_input("Usuario", key="login_user", placeholder="Nombre de usuario")
+            password = st.text_input("Contraseña", type="password", key="login_pass", placeholder="••••••••")
+            if st.button("Ingresar"):
                 if user == "admin" and password == "taco2026":
                     st.session_state["authenticated"] = True
                     st.rerun()
                 else:
                     st.error("Credenciales incorrectas")
-            st.markdown('</div>', unsafe_allow_html=True)
         return False
     return True
 
