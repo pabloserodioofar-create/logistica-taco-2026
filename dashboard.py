@@ -182,7 +182,8 @@ def login():
     if not st.session_state["authenticated"]:
         st.markdown("""
             <style>
-            /* Hide scrolling for login */
+            header[data-testid="stHeader"] { visibility: hidden; }
+            .block-container { padding-top: 0rem !important; }
             .main { overflow: hidden; }
             section[data-testid="stSidebar"] { display: none; }
             
@@ -190,8 +191,9 @@ def login():
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                justify-content: center;
-                height: 80vh;
+                justify-content: flex-start;
+                padding-top: 5vh;
+                height: 95vh;
                 width: 100%;
             }
             .stTextInput {
@@ -213,11 +215,11 @@ def login():
             
             logo_path = 'Logo Ofar.png'
             if os.path.exists(logo_path):
-                st.image(logo_path, width=250)
+                st.image(logo_path, width=280)
             else:
                 st.markdown("<h1>📦</h1>", unsafe_allow_html=True)
             
-            st.markdown("<h2 style='margin-top: 0;'>Logística Taco 2026</h2>", unsafe_allow_html=True)
+            st.markdown("<h2 style='margin-top: 10px; margin-bottom: 0;'>Logística Taco 2026</h2>", unsafe_allow_html=True)
             st.markdown("<p style='color: #888; margin-bottom: 20px;'>Control de Acceso</p>", unsafe_allow_html=True)
 
             # Use columns just for the input width restriction
