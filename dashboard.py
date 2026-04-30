@@ -180,68 +180,74 @@ def load_and_process_data():
     return df, cmap
 
 def login():
-    """Simple login form to protect the dashboard with aggressive layout fixes."""
+    """Simple login form to protect the dashboard with reliable Streamlit layout."""
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
     if not st.session_state["authenticated"]:
         st.markdown("""
             <style>
-            /* Aggressive CSS to remove top space */
-            header[data-testid="stHeader"] { display: none !important; }
-            [data-testid="stAppViewContainer"] > section:nth-child(2) > div:nth-child(1) { padding-top: 0px !important; margin-top: 0px !important; }
-            .block-container { padding-top: 0px !important; margin-top: 0px !important; }
-            .main { overflow: hidden; }
-            section[data-testid="stSidebar"] { display: none !important; }
-            
-            .login-container {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: flex-start;
-                padding-top: 0px;
-                margin-top: 0px;
-                height: 100vh;
-                width: 100%;
+            /* Universal Top Padding Reset */
+            .block-container {
+                padding-top: 2rem !important;
+                padding-bottom: 0rem !important;
             }
-            .stTextInput {
-                max-width: 300px;
-                margin: 0 auto;
+            header[data-testid="stHeader"] {
+                display: none !important;
+            }
+            section[data-testid="stSidebar"] {
+                display: none !important;
+            }
+            /* Hide the main menu hamburger and deploy button */
+            #MainMenu {visibility: hidden;}
+            .stDeployButton {display:none;}
+            
+            /* Clean input styling */
+            .stTextInput > div > div > input {
+                text-align: center;
             }
             div.stButton > button:first-child {
-                max-width: 300px;
-                margin: 10px auto;
-                display: block;
                 background-color: #2e7d32;
                 color: white;
+                width: 100%;
+                margin-top: 15px;
             }
             </style>
         """, unsafe_allow_html=True)
         
-        with st.container():
-            st.markdown('<div class="login-container">', unsafe_allow_html=True)
+        # Use native Streamlit columns for reliable centering
+        c1, c2, c3 = st.columns([1, 2, 1])
+        
+        with c2:
+            st.write("") # Small spacer
             
+            # Logo
             logo_path = 'Logo Ofar.png'
             if os.path.exists(logo_path):
-                st.image(logo_path, width=280)
+                # Center image using HTML since st.image doesn't have an align parameter
+                import base64
+                with open(logo_path, "rb") as image_file:
+                    encoded_string = base64.b64encode(image_file.read()).decode()
+                st.markdown(
+                    f'<div style="text-align: center;"><img src="data:image/png;base64,{encoded_string}" width="280"></div>', 
+                    unsafe_allow_html=True
+                )
             else:
-                st.markdown("<h1>📦</h1>", unsafe_allow_html=True)
+                st.markdown("<h1 style='text-align: center;'>📦</h1>", unsafe_allow_html=True)
             
-            st.markdown("<h2 style='margin-top: 5px; margin-bottom: 0;'>Logística Taco 2026</h2>", unsafe_allow_html=True)
-            st.markdown("<p style='color: #888; margin-bottom: 15px;'>Control de Acceso</p>", unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center; margin-top: 10px; margin-bottom: 0;'>Logística Taco 2026</h2>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: #888; margin-bottom: 30px;'>Control de Acceso</p>", unsafe_allow_html=True)
 
-            # Center inputs
-            _, col_input, _ = st.columns([1, 2, 1])
-            with col_input:
-                user = st.text_input("Usuario", key="login_user", placeholder="Nombre de usuario")
-                password = st.text_input("Contraseña", type="password", key="login_pass", placeholder="••••••••")
-                if st.button("Ingresar"):
-                    if user == "admin" and password == "taco2026":
-                        st.session_state["authenticated"] = True
-                        st.rerun()
-                    else:
-                        st.error("Credenciales incorrectas")
-            st.markdown('</div>', unsafe_allow_html=True)
+            user = st.text_input("Usuario", key="login_user", placeholder="Nombre de usuario")
+            password = st.text_input("Contraseña", type="password", key="login_pass", placeholder="••••••••")
+            
+            if st.button("Ingresar"):
+                if user == "admin" and password == "taco2026":
+                    st.session_state["authenticated"] = True
+                    st.rerun()
+                else:
+                    st.error("Credenciales incorrectas")
+                    
         return False
     return True
 
