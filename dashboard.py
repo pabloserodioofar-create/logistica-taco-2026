@@ -175,25 +175,28 @@ def load_and_process_data():
     return df, cmap
 
 def login():
-    """Simple login form to protect the dashboard with improved aesthetics and centering."""
+    """Simple login form to protect the dashboard with aggressive layout fixes."""
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
     if not st.session_state["authenticated"]:
         st.markdown("""
             <style>
-            header[data-testid="stHeader"] { visibility: hidden; }
-            .block-container { padding-top: 0rem !important; }
+            /* Aggressive CSS to remove top space */
+            header[data-testid="stHeader"] { display: none !important; }
+            [data-testid="stAppViewContainer"] > section:nth-child(2) > div:nth-child(1) { padding-top: 0px !important; margin-top: 0px !important; }
+            .block-container { padding-top: 0px !important; margin-top: 0px !important; }
             .main { overflow: hidden; }
-            section[data-testid="stSidebar"] { display: none; }
+            section[data-testid="stSidebar"] { display: none !important; }
             
             .login-container {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 justify-content: flex-start;
-                padding-top: 5vh;
-                height: 95vh;
+                padding-top: 0px;
+                margin-top: 0px;
+                height: 100vh;
                 width: 100%;
             }
             .stTextInput {
@@ -219,10 +222,10 @@ def login():
             else:
                 st.markdown("<h1>📦</h1>", unsafe_allow_html=True)
             
-            st.markdown("<h2 style='margin-top: 10px; margin-bottom: 0;'>Logística Taco 2026</h2>", unsafe_allow_html=True)
-            st.markdown("<p style='color: #888; margin-bottom: 20px;'>Control de Acceso</p>", unsafe_allow_html=True)
+            st.markdown("<h2 style='margin-top: 5px; margin-bottom: 0;'>Logística Taco 2026</h2>", unsafe_allow_html=True)
+            st.markdown("<p style='color: #888; margin-bottom: 15px;'>Control de Acceso</p>", unsafe_allow_html=True)
 
-            # Use columns just for the input width restriction
+            # Center inputs
             _, col_input, _ = st.columns([1, 2, 1])
             with col_input:
                 user = st.text_input("Usuario", key="login_user", placeholder="Nombre de usuario")
