@@ -237,6 +237,11 @@ def login():
             if st.button("Ingresar"):
                 if user == "admin" and password == "taco2026":
                     st.session_state["authenticated"] = True
+                    st.session_state["role"] = "admin"
+                    st.rerun()
+                elif user == "ventas" and password == "ventas2026":
+                    st.session_state["authenticated"] = True
+                    st.session_state["role"] = "ventas"
                     st.rerun()
                 else:
                     st.error("Credenciales incorrectas")
@@ -280,7 +285,14 @@ def main():
         st.cache_data.clear()
         st.rerun()
 
-    tab1, tab2, tab3 = st.tabs(["🔍 Buscador", "⚙️ Tiempos operativos", "📍 CDS"])
+    # Role-based Tab Access
+    user_role = st.session_state.get("role", "admin")
+    if user_role == "ventas":
+        tabs = st.tabs(["🔍 Buscador"])
+        tab1 = tabs[0]
+        tab2, tab3 = None, None
+    else:
+        tab1, tab2, tab3 = st.tabs(["🔍 Buscador", "⚙️ Tiempos operativos", "📍 CDS"])
 
     # --- TAB 1: BUSCADOR ---
     with tab1:
@@ -348,6 +360,9 @@ def main():
                 use_container_width=True, 
                 hide_index=True
             )
+
+    if user_role == "ventas":
+        return
 
     # --- TAB 2: TIEMPOS OPERATIVOS ---
     with tab2:
