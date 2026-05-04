@@ -140,15 +140,8 @@ def load_and_process_data():
         return val
     df['NIC_CLEAN'] = df.iloc[:, 2].apply(clean_nic_func)
 
-    # Status Logic
-    def get_custom_status(row):
-        bultos = pd.to_numeric(row[MAP_COLS['BULTOS']], errors='coerce')
-        if pd.notnull(row[MAP_COLS['DESPACHO']]): return "Despachado"
-        if pd.notnull(bultos) and bultos > 0: return "Pendiente de despacho"
-        if pd.notnull(row[MAP_COLS['FACTURA']]): return "Pendiente de armado"
-        return "S/D"
-    
-    df['estado de pedido'] = df.apply(get_custom_status, axis=1)
+    # Status Logic (Read directly from Column AG)
+    df['estado de pedido'] = df[MAP_COLS['ESTADO_SHEET']].fillna("S/D")
 
     # Date Conversion for DISPLAY (Robust Method)
     cmap = {}
