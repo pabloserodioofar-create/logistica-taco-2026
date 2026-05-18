@@ -114,10 +114,12 @@ def load_and_process_data():
     MAP_COLS = {
         'NP_ALTA': find_col(7, 'NP Alta -Fecha y hora '),
         'NP_APROB': find_col(11, 'NP de aprobaci\u00f3n final -Fecha y hora '),
+        'VENDEDOR': find_col(3, 'Vendedor'),
         'FACTURA': find_col(14, 'Comprobante Fecha y Hora'), # O
         'BULTOS': find_col(16, 'Cantidad de Bultos'), # Q
         'DESPACHO': find_col(27, 'LR Fecha y Hora '), # AB
         'LR_CIERRE': find_col(29, 'LR Fecha y Hora Cierre'), # AD
+        'PROVINCIA': find_col(22, 'Provincia de Entrega'),
         'ZONA': find_col(31, 'AMBA/INTERIOR'),
         'REMITO_FECHA': find_col(24, 'Remito Fecha y Hora'), # Y
         'ESTADO_SHEET': find_col(32, 'estado de pedido'),
@@ -158,6 +160,8 @@ def load_and_process_data():
 
     # Consistency names
     df['AMBA/INTERIOR'] = df[MAP_COLS['ZONA']]
+    df['Vendedor'] = df[MAP_COLS['VENDEDOR']]
+    df['Provincia'] = df[MAP_COLS['PROVINCIA']]
     df['Dias NP/LR'] = pd.to_numeric(df[MAP_COLS['DIAS_NP_LR']], errors='coerce')
     df['dias de entrega'] = pd.to_numeric(df[MAP_COLS['DIAS_CDS']], errors='coerce')
     df['Pendientes_Sheet'] = pd.to_numeric(df[MAP_COLS['PENDIENTES_CDS']], errors='coerce')
@@ -254,7 +258,9 @@ def main():
         st.stop()
 
     logo_path = 'Logo Ofar.png'
-    last_upd = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+    # Force Argentina Time (UTC-3) instead of server default (which is usually UTC in cloud)
+    from datetime import timedelta
+    last_upd = (datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M:%S')
     
     st.sidebar.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_6u_T-rP3C_h1B1h0o_y0y0y0y0y0y0y0y0&s", width=100)
     st.sidebar.title("Menú de Control")
@@ -359,6 +365,69 @@ def main():
                 cdf[['Nro de Pedido', 'Remito', 'AMBA/INTERIOR', 'estado de pedido', 'Dias NP/LR', 'dias de entrega', 'Total_Order']].sort_values('Nro de Pedido', ascending=False), 
                 use_container_width=True, 
                 hide_index=True
+            )
+
+        st.markdown("---")
+        st.subheader("👨‍💼 Buscador por Vendedor")
+        # Asegurar que los vendedores son strings válidos antes de ordenar
+        vendedores_validos = df['Vendedor'].dropna().astype(str).unique()
+        vendedores = sorted([v for v in vendedores_validos if v.strip() != ""])
+        sel_v = st.selectbox("Seleccione un Vendedor", [""] + vendedores)
+        if sel_v:
+            vdf = df[df['Vendedor'] == sel_v].copy()
+            
+            # Calculate total for each row for average calculation
+            vdf['Total_Order'] = vdf.apply(
+                lambda r: (r['Dias NP/LR'] + (r['dias de entrega'] if pd.notnull(r['dias de entrega']) else 0)) 
+                if r['AMBA/INTERIOR'] == 'CDS' else r['Dias NP/LR'], 
+                axis=1
+            )
+            
+            # Group by Cliente and Provincia
+            # Fillna for Provincia to avoid dropping rows in groupby
+            vdf['Provincia'] = vdf['Provincia'].fillna('S/D')
+            
+            v_summary = vdf.groupby(['Cliente', 'Provincia']).agg(
+                Dias_NP_LR=('Dias NP/LR', 'mean'),
+                Dias_CDS=('dias de entrega', 'mean'),
+                Total_Dias=('Total_Order', 'mean'),
+                Pedidos_Muestreados=('Nro de Pedido', 'count')
+            ).reset_index()
+
+            # Format the output dataframe
+            v_summary.rename(columns={
+                'Dias_NP_LR': 'Promedio NP a LR (Días)',
+                'Dias_CDS': 'Promedio CDS (Días)',
+                'Total_Dias': 'Promedio Total (Días)',
+                'Pedidos_Muestreados': 'Cantidad de Pedidos Muestreados'
+            }, inplace=True)
+
+            # Convert to float for formatting
+            for col in ['Promedio NP a LR (Días)', 'Promedio CDS (Días)', 'Promedio Total (Días)']:
+                v_summary[col] = v_summary[col].apply(lambda x: float(x) if pd.notnull(x) else None)
+
+            # Metrics for the whole salesperson
+            v_total_pedidos = vdf['Nro de Pedido'].count()
+            v_avg_np_lr = vdf['Dias NP/LR'].mean()
+            v_cds = vdf[vdf['AMBA/INTERIOR'] == 'CDS']
+            v_avg_cds = v_cds['dias de entrega'].mean() if not v_cds.empty else None
+            v_avg_total = vdf['Total_Order'].mean()
+
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: st.metric("Promedio General NP a LR", f"{v_avg_np_lr:.2f}" if pd.notnull(v_avg_np_lr) else "S/D")
+            with c2: st.metric("Promedio General CDS", f"{v_avg_cds:.2f}" if pd.notnull(v_avg_cds) else "N/A")
+            with c3: st.metric("Promedio General Total", f"{v_avg_total:.2f}" if pd.notnull(v_avg_total) else "S/D")
+            with c4: st.metric("Total Pedidos Vendedor", v_total_pedidos)
+
+            st.dataframe(
+                v_summary.sort_values('Cantidad de Pedidos Muestreados', ascending=False), 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Promedio NP a LR (Días)": st.column_config.NumberColumn(format="%.2f"),
+                    "Promedio CDS (Días)": st.column_config.NumberColumn(format="%.2f"),
+                    "Promedio Total (Días)": st.column_config.NumberColumn(format="%.2f")
+                }
             )
 
     if user_role == "ventas":
