@@ -387,8 +387,8 @@ def main():
             # Fillna for Provincia to avoid dropping rows in groupby
             vdf['Provincia'] = vdf['Provincia'].fillna('S/D')
             
-            # Calcular dias administrativos como la diferencia
-            vdf['Dias_Admin'] = vdf['Tiempos Logistica'] - vdf['Dias NP/LR']
+            # Calcular dias administrativos en positivo (absoluto de la diferencia)
+            vdf['Dias_Admin'] = abs(vdf['Dias NP/LR'] - vdf['Tiempos Logistica'])
             
             v_summary = vdf.groupby(['Cliente', 'Provincia']).agg(
                 Dias_NP_LR=('Dias NP/LR', 'mean'),
@@ -427,20 +427,20 @@ def main():
             with c4: st.metric("Total Pedidos Vendedor", v_total_pedidos)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            mostrar_desglose = st.checkbox("🔍 Mostrar desglose de Tiempos Logísticos (NP a LR y Días Administrativos)")
+            mostrar_desglose = st.checkbox("🔍 Mostrar desglose de Tiempos Administrativos y Armado/Tráfico")
 
             col_config = {
+                "Promedio NP a LR (Días)": st.column_config.NumberColumn(format="%.2f"),
                 "Promedio CDS (Días)": st.column_config.NumberColumn(format="%.2f"),
-                "Promedio Total (Días)": st.column_config.NumberColumn(format="%.2f"),
-                "Tiempos Logisticos (Armado/trafico)": st.column_config.NumberColumn(format="%.2f")
+                "Promedio Total (Días)": st.column_config.NumberColumn(format="%.2f")
             }
             
-            # Decidir qué columnas mostrar basado en el checkbox (expandir/contraer)
-            cols_to_show = ['Cliente', 'Provincia', 'Tiempos Logisticos (Armado/trafico)']
+            # Decidir qué columnas mostrar basado en el checkbox
+            cols_to_show = ['Cliente', 'Provincia', 'Promedio NP a LR (Días)']
             if mostrar_desglose:
-                cols_to_show.extend(['Promedio NP a LR (Días)', 'Promedio Días Administrativos'])
-                col_config["Promedio NP a LR (Días)"] = st.column_config.NumberColumn(format="%.2f")
+                cols_to_show.extend(['Promedio Días Administrativos', 'Tiempos Logisticos (Armado/trafico)'])
                 col_config["Promedio Días Administrativos"] = st.column_config.NumberColumn(format="%.2f")
+                col_config["Tiempos Logisticos (Armado/trafico)"] = st.column_config.NumberColumn(format="%.2f")
                 
             cols_to_show.extend(['Promedio CDS (Días)', 'Promedio Total (Días)', 'Cantidad de Pedidos Muestreados'])
 
