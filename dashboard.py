@@ -174,7 +174,11 @@ def load_and_process_data():
     df['Fecha Remito'] = df[cmap['REMITO_FECHA']].dt.strftime('%d/%m/%Y')
     df['Fecha Despacho'] = df[cmap['DESPACHO']].dt.strftime('%d/%m/%Y')
     
-    return df, cmap
+    # Calculate Last Updated Date from Data
+    max_dates = [df[col].max() for col in cmap.values() if not df[col].dropna().empty]
+    last_update_str = max(max_dates).strftime('%d/%m/%Y %H:%M:%S') if max_dates else "Desconocido"
+    
+    return df, cmap, last_update_str
 
 def login():
     """Simple login form to protect the dashboard with reliable Streamlit layout."""
@@ -258,9 +262,6 @@ def main():
         st.stop()
 
     logo_path = 'Logo Ofar.png'
-    # Force Argentina Time (UTC-3) instead of server default (which is usually UTC in cloud)
-    from datetime import timedelta
-    last_upd = (datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M:%S')
     
     st.sidebar.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_6u_T-rP3C_h1B1h0o_y0y0y0y0y0y0y0y0&s", width=100)
     st.sidebar.title("Menú de Control")
@@ -268,15 +269,15 @@ def main():
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state["authenticated"] = False
         st.rerun()
+        
+    df, cmap, last_upd = load_and_process_data()
     
     col_logo, col_title = st.columns([1, 4])
     with col_logo:
         if os.path.exists(logo_path): st.image(logo_path, width=150)
     with col_title:
         st.title("Logistics Dashboard - Taco 2026")
-        st.markdown(f"<div class='last-update'>🕒 Sincronizado: {last_upd}</div>", unsafe_allow_html=True)
-
-    df, cmap = load_and_process_data()
+        st.markdown(f"<div class='last-update'>🕒 Última actualización (Base de datos): {last_upd}</div>", unsafe_allow_html=True)
     
     # NIC Cleaning (Restored)
     def clean_nic_func(val):
@@ -391,6 +392,7 @@ def main():
                 Dias_NP_LR=('Dias NP/LR', 'mean'),
                 Dias_CDS=('dias de entrega', 'mean'),
                 Total_Dias=('Total_Order', 'mean'),
+                Tiempo_Log_AO=('Tiempos Logistica', 'mean'),
                 Pedidos_Muestreados=('Nro de Pedido', 'count')
             ).reset_index()
 
@@ -399,11 +401,12 @@ def main():
                 'Dias_NP_LR': 'Promedio NP a LR (Días)',
                 'Dias_CDS': 'Promedio CDS (Días)',
                 'Total_Dias': 'Promedio Total (Días)',
+                'Tiempo_Log_AO': 'Tiempo Logístico Promedio (Col AO)',
                 'Pedidos_Muestreados': 'Cantidad de Pedidos Muestreados'
             }, inplace=True)
 
             # Convert to float for formatting
-            for col in ['Promedio NP a LR (Días)', 'Promedio CDS (Días)', 'Promedio Total (Días)']:
+            for col in ['Promedio NP a LR (Días)', 'Promedio CDS (Días)', 'Promedio Total (Días)', 'Tiempo Logístico Promedio (Col AO)']:
                 v_summary[col] = v_summary[col].apply(lambda x: float(x) if pd.notnull(x) else None)
 
             # Metrics for the whole salesperson
@@ -426,7 +429,8 @@ def main():
                 column_config={
                     "Promedio NP a LR (Días)": st.column_config.NumberColumn(format="%.2f"),
                     "Promedio CDS (Días)": st.column_config.NumberColumn(format="%.2f"),
-                    "Promedio Total (Días)": st.column_config.NumberColumn(format="%.2f")
+                    "Promedio Total (Días)": st.column_config.NumberColumn(format="%.2f"),
+                    "Tiempo Logístico Promedio (Col AO)": st.column_config.NumberColumn(format="%.2f")
                 }
             )
 
