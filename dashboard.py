@@ -174,11 +174,7 @@ def load_and_process_data():
     df['Fecha Remito'] = df[cmap['REMITO_FECHA']].dt.strftime('%d/%m/%Y')
     df['Fecha Despacho'] = df[cmap['DESPACHO']].dt.strftime('%d/%m/%Y')
     
-    # Calculate Last Updated Date from Data
-    max_dates = [df[col].max() for col in cmap.values() if not df[col].dropna().empty]
-    last_update_str = max(max_dates).strftime('%d/%m/%Y %H:%M:%S') if max_dates else "Desconocido"
-    
-    return df, cmap, last_update_str
+    return df, cmap
 
 def login():
     """Simple login form to protect the dashboard with reliable Streamlit layout."""
@@ -262,6 +258,9 @@ def main():
         st.stop()
 
     logo_path = 'Logo Ofar.png'
+    # Force Argentina Time (UTC-3) instead of server default (which is usually UTC in cloud)
+    from datetime import timedelta
+    last_upd = (datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M:%S')
     
     st.sidebar.image("https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_6u_T-rP3C_h1B1h0o_y0y0y0y0y0y0y0y0&s", width=100)
     st.sidebar.title("Menú de Control")
@@ -270,14 +269,14 @@ def main():
         st.session_state["authenticated"] = False
         st.rerun()
         
-    df, cmap, last_upd = load_and_process_data()
+    df, cmap = load_and_process_data()
     
     col_logo, col_title = st.columns([1, 4])
     with col_logo:
         if os.path.exists(logo_path): st.image(logo_path, width=150)
     with col_title:
         st.title("Logistics Dashboard - Taco 2026")
-        st.markdown(f"<div class='last-update'>🕒 Última actualización (Base de datos): {last_upd}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='last-update'>🕒 Sincronizado: {last_upd}</div>", unsafe_allow_html=True)
     
     # NIC Cleaning (Restored)
     def clean_nic_func(val):
@@ -388,8 +387,12 @@ def main():
             # Fillna for Provincia to avoid dropping rows in groupby
             vdf['Provincia'] = vdf['Provincia'].fillna('S/D')
             
+            # Calcular dias administrativos como la diferencia
+            vdf['Dias_Admin'] = vdf['Tiempos Logistica'] - vdf['Dias NP/LR']
+            
             v_summary = vdf.groupby(['Cliente', 'Provincia']).agg(
                 Dias_NP_LR=('Dias NP/LR', 'mean'),
+                Dias_Admin=('Dias_Admin', 'mean'),
                 Dias_CDS=('dias de entrega', 'mean'),
                 Total_Dias=('Total_Order', 'mean'),
                 Tiempo_Log_AO=('Tiempos Logistica', 'mean'),
@@ -399,14 +402,15 @@ def main():
             # Format the output dataframe
             v_summary.rename(columns={
                 'Dias_NP_LR': 'Promedio NP a LR (Días)',
+                'Dias_Admin': 'Promedio Días Administrativos',
                 'Dias_CDS': 'Promedio CDS (Días)',
                 'Total_Dias': 'Promedio Total (Días)',
-                'Tiempo_Log_AO': 'Tiempo Logístico Promedio (Col AO)',
+                'Tiempo_Log_AO': 'Tiempos Logisticos (Armado/trafico)',
                 'Pedidos_Muestreados': 'Cantidad de Pedidos Muestreados'
             }, inplace=True)
 
             # Convert to float for formatting
-            for col in ['Promedio NP a LR (Días)', 'Promedio CDS (Días)', 'Promedio Total (Días)', 'Tiempo Logístico Promedio (Col AO)']:
+            for col in ['Promedio NP a LR (Días)', 'Promedio Días Administrativos', 'Promedio CDS (Días)', 'Promedio Total (Días)', 'Tiempos Logisticos (Armado/trafico)']:
                 v_summary[col] = v_summary[col].apply(lambda x: float(x) if pd.notnull(x) else None)
 
             # Metrics for the whole salesperson
@@ -422,16 +426,29 @@ def main():
             with c3: st.metric("Promedio General Total", f"{v_avg_total:.2f}" if pd.notnull(v_avg_total) else "S/D")
             with c4: st.metric("Total Pedidos Vendedor", v_total_pedidos)
 
+            st.markdown("<br>", unsafe_allow_html=True)
+            mostrar_desglose = st.checkbox("🔍 Mostrar desglose de Tiempos Logísticos (NP a LR y Días Administrativos)")
+
+            col_config = {
+                "Promedio CDS (Días)": st.column_config.NumberColumn(format="%.2f"),
+                "Promedio Total (Días)": st.column_config.NumberColumn(format="%.2f"),
+                "Tiempos Logisticos (Armado/trafico)": st.column_config.NumberColumn(format="%.2f")
+            }
+            
+            # Decidir qué columnas mostrar basado en el checkbox (expandir/contraer)
+            cols_to_show = ['Cliente', 'Provincia', 'Tiempos Logisticos (Armado/trafico)']
+            if mostrar_desglose:
+                cols_to_show.extend(['Promedio NP a LR (Días)', 'Promedio Días Administrativos'])
+                col_config["Promedio NP a LR (Días)"] = st.column_config.NumberColumn(format="%.2f")
+                col_config["Promedio Días Administrativos"] = st.column_config.NumberColumn(format="%.2f")
+                
+            cols_to_show.extend(['Promedio CDS (Días)', 'Promedio Total (Días)', 'Cantidad de Pedidos Muestreados'])
+
             st.dataframe(
-                v_summary.sort_values('Cantidad de Pedidos Muestreados', ascending=False), 
+                v_summary[cols_to_show].sort_values('Cantidad de Pedidos Muestreados', ascending=False), 
                 use_container_width=True, 
                 hide_index=True,
-                column_config={
-                    "Promedio NP a LR (Días)": st.column_config.NumberColumn(format="%.2f"),
-                    "Promedio CDS (Días)": st.column_config.NumberColumn(format="%.2f"),
-                    "Promedio Total (Días)": st.column_config.NumberColumn(format="%.2f"),
-                    "Tiempo Logístico Promedio (Col AO)": st.column_config.NumberColumn(format="%.2f")
-                }
+                column_config=col_config
             )
 
     if user_role == "ventas":
