@@ -116,6 +116,7 @@ def load_and_process_data():
         'NP_APROB': find_col(11, 'NP de aprobaci\u00f3n final -Fecha y hora '),
         'VENDEDOR': find_col(3, 'Vendedor'),
         'FACTURA': find_col(14, 'Comprobante Fecha y Hora'), # O
+        'NRO_COMPROBANTE': find_col(12, 'Comprobante'), # M
         'BULTOS': find_col(16, 'Cantidad de Bultos'), # Q
         'DESPACHO': find_col(27, 'LR Fecha y Hora '), # AB
         'LR_CIERRE': find_col(29, 'LR Fecha y Hora Cierre'), # AD
@@ -171,6 +172,7 @@ def load_and_process_data():
     df['CDS entrega'] = df[MAP_COLS['CDS_ENTREGA']]
     df['Remito Date'] = df[MAP_COLS['FACTURA']]
     df['Bultos'] = df[MAP_COLS['BULTOS']]
+    df['Factura'] = df[MAP_COLS['NRO_COMPROBANTE']]
     df['Fecha Remito'] = df[cmap['REMITO_FECHA']].dt.strftime('%d/%m/%Y')
     df['Fecha Despacho'] = df[cmap['DESPACHO']].dt.strftime('%d/%m/%Y')
     
@@ -303,11 +305,12 @@ def main():
     # --- TAB 1: BUSCADOR ---
     with tab1:
         st.subheader("Buscador Global")
-        sq = st.text_input("Pedido, Cliente o Remito", "")
+        sq = st.text_input("Pedido, Cliente, Factura o Remito", "")
         if sq:
             # Use original col names for search if needed, but 'Nro de Pedido', 'Cliente', 'Remito' are standard
             mask = df['Nro de Pedido'].astype(str).str.contains(sq, case=False) | \
                    df['Cliente'].astype(str).str.contains(sq, case=False) | \
+                   df['Factura'].fillna("").astype(str).str.contains(sq, case=False) | \
                    df['Remito'].astype(str).str.contains(sq, case=False)
             if len(sq) > 7: mask |= df['NIC_CLEAN'].astype(str).str.contains(sq)
             res = df[mask].drop_duplicates(subset=['Nro de Pedido', 'Remito'])
@@ -317,6 +320,7 @@ def main():
                 f_ap = r[cmap['NP_APROB']].strftime('%d/%m/%Y') if pd.notnull(r[cmap['NP_APROB']]) else 'S/D'
                 f_fc = r[cmap['FACTURA']].strftime('%d/%m/%Y') if pd.notnull(r[cmap['FACTURA']]) else 'S/D'
                 f_dp = r[cmap['DESPACHO']].strftime('%d/%m/%Y') if pd.notnull(r[cmap['DESPACHO']]) else 'S/D'
+                f_factura = str(r['Factura']).strip() if pd.notnull(r['Factura']) and str(r['Factura']).strip() != 'nan' else 'S/D'
                 
                 # Extra metrics for CDS
                 cds_info = ""
@@ -327,7 +331,7 @@ def main():
                 
                 st.markdown(f"""<div class="search-card">
 <div class="card-header"><h3>{r['Cliente']}</h3></div>
-<div class="card-subtitle">Pedido: <b>{r['Nro de Pedido']}</b> | Remito: <b>{r['Remito']}</b> | Zona: <b>{r['AMBA/INTERIOR']}</b></div>
+<div class="card-subtitle">Pedido: <b>{r['Nro de Pedido']}</b> | Factura: <b>{f_factura}</b> | Remito: <b>{r['Remito']}</b> | Zona: <b>{r['AMBA/INTERIOR']}</b></div>
 <div class="timeline-container">
 <div class="timeline-item">📅 <b>Alta Nota de Pedido:</b> {f_np}</div>
 <div class="timeline-item">✅ <b>Aprobación Cuentas:</b> {f_ap}</div>
